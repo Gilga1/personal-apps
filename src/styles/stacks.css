@@ -1078,8 +1078,19 @@ tr.playing-row .eq {
   flex: 0 0 auto;
 }
 
-.ingest-playlist-row {
-  margin-top: -8px;
+.ingest-combined-row {
+  flex-wrap: wrap;
+}
+
+.ingest-combined-row .nl-input {
+  flex: 2 1 280px;
+  min-width: 200px;
+}
+
+.ingest-playlist-input {
+  flex: 1 1 140px;
+  min-width: 120px;
+  width: auto;
 }
 
 .ingest-hint {

@@ -175,7 +175,11 @@ function App() {
   );
 
   useEffect(() => {
+    let lastTick = 0;
     const unsubscribe = audioEngine.onProgress((time, dur) => {
+      const now = performance.now();
+      if (now - lastTick < 200) return;
+      lastTick = now;
       setCurrentTime(time);
       setDuration(dur);
     });
@@ -231,6 +235,14 @@ function App() {
     setMoodFilter(null);
     setSearchText("");
   }, [setQueueOverride, setMoodFilter, setSearchText]);
+
+  const handlePlaylistImported = useCallback(
+    (ids: string[]) => {
+      setQueueOverride(ids);
+      setQueuePrompt("YouTube import");
+    },
+    [setQueueOverride],
+  );
 
   const handleBuildQueue = async (prompt: string, useLlm: boolean) => {
     const toastId = push(`Building queue for "${prompt}"…`, "progress", 0);
@@ -336,10 +348,7 @@ function App() {
         />
         <IngestPanel
           onIngestComplete={refreshTracks}
-          onPlaylistImported={(ids) => {
-            setQueueOverride(ids);
-            setQueuePrompt("YouTube import");
-          }}
+          onPlaylistImported={handlePlaylistImported}
         />
         <PlaylistsPanel
           currentQueue={currentQueue}

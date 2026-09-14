@@ -10,42 +10,58 @@ pub fn ingest_dir(data_dir: &Path) -> PathBuf {
 pub fn local_yt_dlp_path(data_dir: &Path) -> PathBuf {
     #[cfg(windows)]
     {
-        let local = data_dir.join("yt-dlp.exe");
-        if local.exists() {
-            return local;
-        }
+        data_dir.join("yt-dlp.exe")
     }
     #[cfg(not(windows))]
     {
-        let local = data_dir.join("yt-dlp");
-        if local.exists() {
-            return local;
-        }
+        data_dir.join("yt-dlp")
     }
-    PathBuf::from("yt-dlp")
 }
+
+#[cfg(windows)]
+fn hide_window(cmd: &mut std::process::Command) {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    cmd.creation_flags(CREATE_NO_WINDOW);
+}
+
+#[cfg(windows)]
+fn hide_window_async(cmd: &mut Command) {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    cmd.creation_flags(CREATE_NO_WINDOW);
+}
+
+#[cfg(not(windows))]
+fn hide_window(_cmd: &mut std::process::Command) {}
+
+#[cfg(not(windows))]
+fn hide_window_async(_cmd: &mut Command) {}
 
 pub fn yt_dlp_available(data_dir: &Path) -> bool {
     let path = local_yt_dlp_path(data_dir);
-    std::process::Command::new(&path)
-        .arg("--version")
-        .output()
+    if !path.exists() {
+        return false;
+    }
+    let mut cmd = std::process::Command::new(&path);
+    cmd.arg("--version");
+    hide_window(&mut cmd);
+    cmd.output()
         .map(|o| o.status.success())
         .unwrap_or(false)
 }
 
 pub async fn ensure_yt_dlp(data_dir: &Path) -> Result<PathBuf, String> {
-    let path = local_yt_dlp_path(data_dir);
     if yt_dlp_available(data_dir) {
-        return Ok(path);
+        return Ok(local_yt_dlp_path(data_dir));
+    }
+
+    if YTDLP_SETUP.get().is_some() {
+        return Ok(local_yt_dlp_path(data_dir));
     }
 
     std::fs::create_dir_all(data_dir).map_err(|e| e.to_string())?;
-
-    #[cfg(windows)]
-    let dest = data_dir.join("yt-dlp.exe");
-    #[cfg(not(windows))]
-    let dest = data_dir.join("yt-dlp");
+    let dest = local_yt_dlp_path(data_dir);
 
     #[cfg(windows)]
     let url = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe";
@@ -73,6 +89,7 @@ pub async fn ensure_yt_dlp(data_dir: &Path) -> Result<PathBuf, String> {
         std::fs::set_permissions(&dest, perms).map_err(|e| e.to_string())?;
     }
 
+    let _ = YTDLP_SETUP.set(());
     Ok(dest)
 }
 
@@ -106,6 +123,7 @@ pub async fn download_audio(
 
     cmd.stdout(std::process::Stdio::piped());
     cmd.stderr(std::process::Stdio::piped());
+    hide_window_async(&mut cmd);
 
     let mut child = cmd.spawn().map_err(|e| format!("Failed to spawn yt-dlp: {e}"))?;
 

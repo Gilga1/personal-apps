@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   checkYtdlpAvailable,
   ensureYtdlp,
@@ -23,7 +23,10 @@ export function IngestPanel({
   const [jobs, setJobs] = useState<IngestJob[]>([]);
   const [ytdlpOk, setYtdlpOk] = useState(true);
   const [preparing, setPreparing] = useState(false);
-  const { push, update, dismiss } = useToastStore();
+  const onCompleteRef = useRef(onIngestComplete);
+  const onPlaylistRef = useRef(onPlaylistImported);
+  onCompleteRef.current = onIngestComplete;
+  onPlaylistRef.current = onPlaylistImported;
 
   const refresh = async () => {
     const [available, list] = await Promise.all([
@@ -34,66 +37,70 @@ export function IngestPanel({
     setJobs(list);
   };
 
+  // Run setup once on mount — never re-run on parent re-renders (playback ticks).
   useEffect(() => {
+    let cancelled = false;
+    let unlistenFn: (() => void) | undefined;
+    let toastId: string | null = null;
+    const { push, update, dismiss } = useToastStore.getState();
+
     (async () => {
       if (!isWebMode()) {
         setPreparing(true);
         try {
           await ensureYtdlp();
         } catch {
-          // still check availability below
+          // availability check below
         } finally {
-          setPreparing(false);
+          if (!cancelled) setPreparing(false);
         }
       }
-      await refresh();
+      if (!cancelled) await refresh();
     })();
+
+    let intervalId: ReturnType<typeof setInterval> | undefined;
 
     if (isWebMode()) {
-      const id = setInterval(refresh, 2000);
-      return () => clearInterval(id);
+      intervalId = setInterval(refresh, 2000);
+    } else {
+      (async () => {
+        const { listen } = await import("@tauri-apps/api/event");
+        if (cancelled) return;
+        unlistenFn = await listen<IngestProgressEvent>("ingest-progress", (ev) => {
+          const p = ev.payload;
+          if (!toastId) {
+            toastId = push("Starting YouTube import…", "progress", p.progress);
+          } else {
+            update(toastId, p.message, "progress", p.progress);
+          }
+          if (p.status === "done") {
+            if (toastId) {
+              update(toastId, p.message, "success", 100);
+              setTimeout(() => toastId && dismiss(toastId), 4000);
+            }
+            if (p.track_ids?.length) {
+              onPlaylistRef.current?.(p.track_ids);
+            }
+            refresh();
+            onCompleteRef.current();
+          }
+          if (p.status === "failed") {
+            if (toastId) {
+              update(toastId, p.message, "error");
+              setTimeout(() => toastId && dismiss(toastId), 5000);
+            }
+            refresh();
+          }
+        });
+      })();
     }
-
-    let cancelled = false;
-    let unlistenFn: (() => void) | undefined;
-    let toastId: string | null = null;
-
-    (async () => {
-      const { listen } = await import("@tauri-apps/api/event");
-      if (cancelled) return;
-      unlistenFn = await listen<IngestProgressEvent>("ingest-progress", (ev) => {
-        const p = ev.payload;
-        if (!toastId) {
-          toastId = push("Starting YouTube import…", "progress", p.progress);
-        } else {
-          update(toastId, p.message, "progress", p.progress);
-        }
-        if (p.status === "done") {
-          if (toastId) {
-            update(toastId, p.message, "success", 100);
-            setTimeout(() => toastId && dismiss(toastId), 4000);
-          }
-          if (p.track_ids?.length && onPlaylistImported) {
-            onPlaylistImported(p.track_ids);
-          }
-          refresh();
-          onIngestComplete();
-        }
-        if (p.status === "failed") {
-          if (toastId) {
-            update(toastId, p.message, "error");
-            setTimeout(() => toastId && dismiss(toastId), 5000);
-          }
-          refresh();
-        }
-      });
-    })();
 
     return () => {
       cancelled = true;
+      if (intervalId) clearInterval(intervalId);
       unlistenFn?.();
     };
-  }, [onIngestComplete, onPlaylistImported, push, update, dismiss]);
+  }, []);
 
   const submit = async () => {
     const trimmed = url.trim();
@@ -117,7 +124,7 @@ export function IngestPanel({
 
   return (
     <div className="ingest-panel">
-      <div className="ingest-row">
+      <div className="ingest-row ingest-combined-row">
         <input
           className="nl-input"
           placeholder="Paste YouTube URL (video or playlist)"
@@ -125,6 +132,14 @@ export function IngestPanel({
           onChange={(e) => setUrl(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && submit()}
           disabled={!ytdlpOk || preparing}
+        />
+        <input
+          className="search-input ingest-playlist-input"
+          placeholder="Playlist name"
+          value={playlistName}
+          onChange={(e) => setPlaylistName(e.target.value)}
+          disabled={!ytdlpOk || preparing}
+          title="Optional — saves imported tracks as a playlist"
         />
         <button
           type="button"
@@ -134,17 +149,8 @@ export function IngestPanel({
           Import
         </button>
       </div>
-      <div className="ingest-row ingest-playlist-row">
-        <input
-          className="nl-input"
-          placeholder="Playlist name (optional — saves imported tracks)"
-          value={playlistName}
-          onChange={(e) => setPlaylistName(e.target.value)}
-          disabled={!ytdlpOk || preparing}
-        />
-      </div>
       {preparing && (
-        <p className="ingest-hint">Setting up YouTube import…</p>
+        <p className="ingest-hint">Setting up YouTube import (one-time)…</p>
       )}
       {!preparing && !ytdlpOk && (
         <p className="ingest-warn">

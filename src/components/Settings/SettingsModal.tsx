@@ -46,6 +46,7 @@ export function SettingsModal() {
     if (!settingsOpen) return;
     let unlisten: (() => void) | undefined;
     let toastId: string | null = null;
+    const { push, update } = useToastStore.getState();
     (async () => {
       const { listen } = await import("@tauri-apps/api/event");
       unlisten = await listen<EnrichProgressEvent>("enrich-progress", (ev) => {
@@ -59,7 +60,7 @@ export function SettingsModal() {
       });
     })();
     return () => unlisten?.();
-  }, [settingsOpen, push, update]);
+  }, [settingsOpen]);
 
   const currentProvider = config
     ? providers.find((p) => p.id === config.provider)
