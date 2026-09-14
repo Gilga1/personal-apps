@@ -99,7 +99,9 @@ export function NowPlaying({
                 ? "Embedded tags"
                 : track.tag_source === "llm_normalized"
                   ? "LLM normalized"
-                  : "Filename match"}
+                  : track.tag_source === "rule_normalized"
+                    ? "Rule tagged"
+                    : "Filename match"}
             </span>
           )}
         </motion.div>

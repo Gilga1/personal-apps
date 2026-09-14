@@ -19,22 +19,28 @@ import type {
 } from "../../types";
 
 function formatEnrichResult(result: EnrichResult): string {
+  const parts = [`Keyword-tagged ${result.rule_tagged} Unsorted track(s).`];
   if (result.total === 0) {
-    return "No filename-only tracks to enrich. Tracks with embedded tags are skipped.";
-  }
-  const parts = [
-    `Done: ${result.enriched} of ${result.total} filename-only track(s) enriched.`,
-  ];
-  if (result.failed > 0) {
-    parts.push(`${result.failed} failed.`);
-    if (result.last_error) {
-      parts.push(`Last error: ${result.last_error}`);
+    parts.push("No filename-only tracks needed metadata cleanup.");
+  } else {
+    parts.push(
+      `Filename tracks: ${result.rule_enriched} by rules, ${result.llm_enriched} via LLM (${result.total} total).`,
+    );
+    if (result.failed > 0) {
+      parts.push(`${result.failed} still unresolved.`);
+      if (result.last_error) {
+        parts.push(`Last error: ${result.last_error}`);
+      }
     }
   }
   return parts.join(" ");
 }
 
-export function SettingsModal() {
+interface SettingsModalProps {
+  onLibraryTagged?: () => void | Promise<void>;
+}
+
+export function SettingsModal({ onLibraryTagged }: SettingsModalProps) {
   const {
     settingsOpen,
     setSettingsOpen,
@@ -117,9 +123,11 @@ export function SettingsModal() {
       await setLlmConfig(config);
       storeLlmConfig(config);
       const result = await normalizeLowConfidence();
+      await onLibraryTagged?.();
       const msg = formatEnrichResult(result);
       setStatus(msg);
-      update(toastId, msg, result.failed > 0 ? "error" : "success", 100);
+      const hadFailures = result.failed > 0 && result.rule_enriched === 0;
+      update(toastId, msg, hadFailures ? "error" : "success", 100);
       setTimeout(() => dismiss(toastId), 6000);
     } catch (e) {
       const msg = String(e);
@@ -152,8 +160,8 @@ export function SettingsModal() {
         <h2>LLM settings</h2>
         <p className="modal-sub">
           Configure OpenRouter, OpenAI, Gemini, or a local Ollama model (including
-          small 2B models like gemma2:2b). Enrich only updates tracks without
-          embedded tags (shown as &ldquo;Filename match&rdquo; in the player).
+          small 2B models like gemma2:2b). Auto-tag uses keyword rules first
+          (e.g. soothing, romantic, nature), then LLM for filename-only tracks.
         </p>
 
         <label>
@@ -253,7 +261,7 @@ export function SettingsModal() {
             onClick={enrich}
             disabled={enriching}
           >
-            {enriching ? "Enriching…" : "Enrich filename matches"}
+            {enriching ? "Tagging…" : "Auto-tag library"}
           </button>
           <button type="button" className="primary-btn" onClick={save}>
             Save

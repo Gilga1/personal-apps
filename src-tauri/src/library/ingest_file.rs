@@ -12,7 +12,7 @@ pub fn ingest_file(db: &Database, path: &Path) -> Result<String, String> {
     let folder_path = path.parent().map(|p| p.to_string_lossy().to_string());
 
     let parsed = parse_audio_file(path, folder_name)?;
-    let mood = classify_mood(&parsed, folder_name);
+    let mood = classify_mood(&parsed, folder_name).mood;
     let format = path
         .extension()
         .and_then(|e| e.to_str())

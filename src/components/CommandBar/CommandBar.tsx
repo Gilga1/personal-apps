@@ -55,9 +55,9 @@ export function CommandBar({
         )}
       </div>
       <div className="nl-hint">
-        Keyword matching offline
-        {useLlmRerank ? " with optional LLM re-rank" : ""}. Configure provider in
-        Settings.
+        Matches title, artist, album, and mood keywords offline
+        {useLlmRerank ? "; LLM re-ranks top picks" : ""}. Run Auto-tag in Settings
+        if most tracks are Unsorted.
       </div>
     </>
   );

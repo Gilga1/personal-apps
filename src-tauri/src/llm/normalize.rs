@@ -19,9 +19,9 @@ pub async fn normalize_filename(
     raw_name: &str,
 ) -> Result<NormalizedMetadata, String> {
     let prompt = format!(
-        r#"Return JSON only, no prose:
+        r#"Return JSON only, no prose. Infer artist/album from the filename when possible; use "Unknown artist" only if there is no artist hint.
 {{ "title": "", "artist": "", "album": "", "release_year": null, "genre": "",
-  "moods": ["", ""], "energy_score": 1, "situational_tags": ["", ""] }}
+  "moods": ["Chill & Nostalgic"], "energy_score": 4, "situational_tags": ["nature"] }}
 
 Raw filename: "{raw_name}""#
     );
@@ -64,9 +64,10 @@ Raw filename: "{raw_name}""#
         .to_string();
     let artist = json["artist"]
         .as_str()
+        .map(|s| s.trim())
         .filter(|s| !s.is_empty())
-        .ok_or("Missing artist in LLM response")?
-        .to_string();
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| "Unknown artist".to_string());
 
     Ok(NormalizedMetadata {
         title,

@@ -57,8 +57,10 @@ export interface EnrichProgressEvent {
 }
 
 export interface EnrichResult {
+  rule_tagged: number;
   total: number;
-  enriched: number;
+  rule_enriched: number;
+  llm_enriched: number;
   failed: number;
   last_error?: string | null;
 }

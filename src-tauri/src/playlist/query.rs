@@ -62,7 +62,15 @@ fn detect_intent(prompt: &str) -> QueryIntent {
         || p.contains("relax")
         || p.contains("nostalg")
         || p.contains("calm")
+        || p.contains("romantic")
+        || p.contains("love")
+        || p.contains("ballad")
+        || p.contains("soothing")
+        || p.contains("nature")
     {
+        return QueryIntent::Chill;
+    }
+    if p.contains("hindi") || p.contains("bollywood") || p.contains("acoustic") {
         return QueryIntent::Chill;
     }
     if p.contains("late night") || p.contains("night") || p.contains("sleep") {
@@ -102,7 +110,21 @@ fn expand_terms(prompt: &str, intent: QueryIntent) -> Vec<String> {
             "chopin",
             "study",
         ],
-        QueryIntent::Chill => &["chill", "acoustic", "ballad", "nostalgic", "slow", "lofi"],
+        QueryIntent::Chill => &[
+            "chill",
+            "acoustic",
+            "ballad",
+            "nostalgic",
+            "slow",
+            "lofi",
+            "romantic",
+            "soothing",
+            "nature",
+            "waterfall",
+            "waves",
+            "hindi",
+            "bollywood",
+        ],
         QueryIntent::LateNight => &["late", "night", "acoustic", "ballad", "slow", "unplugged"],
         QueryIntent::Neutral => &[],
     };
@@ -127,31 +149,37 @@ fn intent_mood(intent: QueryIntent) -> Option<&'static str> {
 }
 
 fn score_track(t: &Track, terms: &[String], intent: QueryIntent) -> i32 {
+    let title = t.title.to_lowercase();
+    let artist = t.artist.to_lowercase();
+    let album = t.album.to_lowercase();
     let blob = format!(
         "{} {} {} {} {} {}",
-        t.title,
-        t.artist,
-        t.album,
+        title,
+        artist,
+        album,
         t.mood,
         t.genre.as_deref().unwrap_or(""),
         t.situational_tags.join(" ")
-    )
-    .to_lowercase();
+    );
 
-    let mut score = terms
-        .iter()
-        .map(|term| {
-            if blob.contains(term.as_str()) {
-                2
-            } else {
-                0
-            }
-        })
-        .sum::<i32>();
+    let mut score = terms.iter().map(|term| {
+        if title.contains(term.as_str()) {
+            4
+        } else if artist.contains(term.as_str()) || album.contains(term.as_str()) {
+            3
+        } else if blob.contains(term.as_str()) {
+            2
+        } else {
+            0
+        }
+    }).sum::<i32>();
 
     if let Some(target_mood) = intent_mood(intent) {
         if t.mood == target_mood {
             score += 5;
+        } else if t.mood == "Unsorted" && intent != QueryIntent::Neutral {
+            // Still allow title/artist matches for untagged libraries.
+            score += 1;
         }
     }
 
@@ -194,7 +222,7 @@ pub fn keyword_candidates(tracks: &[Track], prompt: &str, limit: usize) -> Vec<T
         return Vec::new();
     }
 
-    let min_score = if intent == QueryIntent::Neutral { 2 } else { 3 };
+    let min_score = if intent == QueryIntent::Neutral { 2 } else { 2 };
 
     let mut scored: Vec<(i32, &Track)> = tracks
         .iter()
@@ -203,6 +231,16 @@ pub fn keyword_candidates(tracks: &[Track], prompt: &str, limit: usize) -> Vec<T
         .collect();
 
     scored.sort_by(|a, b| b.0.cmp(&a.0));
+
+    if scored.is_empty() && !terms.is_empty() {
+        scored = tracks
+            .iter()
+            .map(|t| (score_track(t, &terms, intent), t))
+            .filter(|(score, _)| *score > 0)
+            .collect();
+        scored.sort_by(|a, b| b.0.cmp(&a.0));
+    }
+
     scored
         .into_iter()
         .take(limit)

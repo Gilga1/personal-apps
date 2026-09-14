@@ -379,7 +379,7 @@ function App() {
       />
       </motion.div>
 
-      <SettingsModal />
+      <SettingsModal onLibraryTagged={refreshTracks} />
       <ToastStack />
     </div>
   );
