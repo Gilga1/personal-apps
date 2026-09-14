@@ -8,8 +8,10 @@ import {
 } from "./api/stacks";
 import { audioEngine } from "./audio/AudioEngine";
 import { CommandBar } from "./components/CommandBar/CommandBar";
+import { IngestPanel } from "./components/Ingest/IngestPanel";
 import { Library } from "./components/Library/Library";
 import { NowPlaying } from "./components/NowPlaying/NowPlaying";
+import { PlaylistsPanel } from "./components/Playlists/PlaylistsPanel";
 import { SettingsModal } from "./components/Settings/SettingsModal";
 import { useLibraryStore } from "./state/libraryStore";
 import { getCurrentTrack, usePlayerStore } from "./state/playerStore";
@@ -35,16 +37,19 @@ function App() {
     currentTrackId,
     isPlaying,
     shuffleOn,
+    crossfadeOn,
     volume,
     setCurrentTrackId,
     setIsPlaying,
     toggleShuffle,
+    toggleCrossfade,
     setVolume,
   } = usePlayerStore();
 
   const { setSettingsOpen, llmConfig } = useSettingsStore();
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [queuePrompt, setQueuePrompt] = useState<string | null>(null);
 
   const refreshTracks = useCallback(async () => {
     const data = await getTracks();
@@ -54,6 +59,10 @@ function App() {
   useEffect(() => {
     refreshTracks();
   }, [refreshTracks]);
+
+  useEffect(() => {
+    audioEngine.setCrossfadeEnabled(crossfadeOn);
+  }, [crossfadeOn]);
 
   const filteredTracks = useMemo(() => {
     let pool = tracks;
@@ -98,9 +107,8 @@ function App() {
       const track = tracks.find((t) => t.id === trackId);
       if (!track) return;
       setCurrentTrackId(trackId);
-      await audioEngine.loadTrack(track.file_path);
+      await audioEngine.loadAndPlay(track.file_path);
       audioEngine.setVolume(volume);
-      await audioEngine.play();
       setIsPlaying(true);
       audioEngine.setPlaying(true);
     },
@@ -159,7 +167,7 @@ function App() {
       audio.removeEventListener("loadedmetadata", onMeta);
       audio.removeEventListener("ended", onEnd);
     };
-  }, [step]);
+  }, [step, currentTrackId]);
 
   const pickFolder = async () => {
     const folder = await pickLibraryFolder();
@@ -185,10 +193,18 @@ function App() {
       alert("No matches — try simpler terms or check your library.");
       return;
     }
+    setQueuePrompt(prompt);
     setQueueOverride(ids);
     await playTrack(ids[0]);
   };
 
+  const handleLoadPlaylist = async (ids: string[]) => {
+    setQueuePrompt(null);
+    setQueueOverride(ids);
+    await playTrack(ids[0]);
+  };
+
+  const currentQueue = queueOverride ?? playPool.map((t) => t.id);
   const currentTrack = getCurrentTrack(tracks, currentTrackId);
 
   return (
@@ -209,6 +225,7 @@ function App() {
         track={currentTrack}
         isPlaying={isPlaying}
         shuffleOn={shuffleOn}
+        crossfadeOn={crossfadeOn}
         currentTime={currentTime}
         duration={duration}
         volume={volume}
@@ -217,6 +234,7 @@ function App() {
         onPrev={() => step(-1)}
         onNext={() => step(1)}
         onShuffle={toggleShuffle}
+        onCrossfade={toggleCrossfade}
         onSeek={(ratio) => audioEngine.seek(ratio)}
         onVolume={(v) => {
           setVolume(v);
@@ -230,6 +248,12 @@ function App() {
           onBuildQueue={handleBuildQueue}
           llmEnabled={!!llmConfig}
         />
+        <IngestPanel onIngestComplete={refreshTracks} />
+        <PlaylistsPanel
+          currentQueue={currentQueue}
+          queuePrompt={queuePrompt}
+          onLoadPlaylist={handleLoadPlaylist}
+        />
       </section>
 
       <Library
@@ -241,6 +265,7 @@ function App() {
         onOpenSettings={() => setSettingsOpen(true)}
         onPlay={(id) => {
           setQueueOverride(null);
+          setQueuePrompt(null);
           playTrack(id);
         }}
         onMoodClick={handleMoodClick}

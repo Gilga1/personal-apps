@@ -31,3 +31,27 @@ export interface LlmProviderInfo {
   label: string;
   models: string[];
 }
+
+export interface IngestJob {
+  id: string;
+  source_url: string;
+  status: string;
+  output_path?: string | null;
+  error?: string | null;
+}
+
+export interface IngestProgressEvent {
+  job_id: string;
+  status: string;
+  progress: number;
+  message: string;
+  track_id?: string | null;
+}
+
+export interface PlaylistSummary {
+  id: string;
+  name: string;
+  created_from?: string | null;
+  created_at: string;
+  track_count: number;
+}

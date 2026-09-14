@@ -209,6 +209,10 @@ Color tokens: `--bg`, `--panel`, `--accent-amber`, `--accent-rust`, `--accent-mo
 | `normalize_track` | LLM-enrich single track |
 | `normalize_low_confidence` | Batch LLM for filename_fallback rows |
 | `build_playlist` | NL queue builder (keyword + optional LLM) |
+| `ingest_youtube` | Start background YouTube download + library ingest |
+| `get_ingest_jobs` | List recent ingest jobs |
+| `check_ytdlp_available` | Whether yt-dlp is on PATH |
+| `save_playlist` / `get_playlists` / `get_playlist_tracks` / `delete_playlist` | Playlist CRUD |
 
 ---
 
@@ -220,8 +224,8 @@ Color tokens: `--bg`, `--panel`, `--accent-amber`, `--accent-rust`, `--accent-mo
 | 2 | Playback engine, turntable, analyser glow | **This commit** |
 | 3 | Rule mood engine + manual override in DB | **This commit** |
 | 4 | Configurable LLM providers + normalize + NL rerank | **This commit** |
-| 5 | YouTube ingestion (`yt-dlp` / `ffmpeg`) | Future |
-| 6 | Playlists persistence, crossfade, virtualized table | Future |
+| 5 | YouTube ingestion (`yt-dlp` / `ffmpeg`) | **Done** |
+| 6 | Playlists persistence, crossfade, virtualized table | **Done** |
 
 ---
 

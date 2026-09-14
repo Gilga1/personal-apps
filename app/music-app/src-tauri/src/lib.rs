@@ -1,4 +1,5 @@
 mod commands;
+mod ingest;
 mod library;
 mod llm;
 mod playlist;
@@ -18,9 +19,10 @@ pub fn run() {
                 .path()
                 .app_data_dir()
                 .map_err(|e| e.to_string())?;
-            let db = Database::open(data_dir)?;
+            let db = Database::open(data_dir.clone())?;
             app.manage(AppState {
                 db: Arc::new(db),
+                data_dir,
             });
             Ok(())
         })
@@ -36,6 +38,13 @@ pub fn run() {
             commands::normalize_low_confidence,
             commands::build_playlist_queue,
             commands::list_llm_providers,
+            commands::ingest_youtube,
+            commands::get_ingest_jobs,
+            commands::check_ytdlp_available,
+            commands::save_playlist,
+            commands::get_playlists,
+            commands::get_playlist_tracks,
+            commands::delete_playlist,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

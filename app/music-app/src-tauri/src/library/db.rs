@@ -386,4 +386,151 @@ impl Database {
         let tracks = self.get_all_tracks()?;
         Ok(tracks.into_iter().find(|t| t.id == id))
     }
+
+    // --- Ingest jobs ---
+
+    pub fn create_ingest_job(&self, id: &str, source_url: &str) -> Result<(), String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        conn.execute(
+            "INSERT INTO ingest_jobs (id, source_url, status, output_path, error) VALUES (?1, ?2, 'queued', NULL, NULL)",
+            params![id, source_url],
+        )
+        .map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    pub fn update_ingest_job(
+        &self,
+        id: &str,
+        status: &str,
+        output_path: Option<&str>,
+        error: Option<&str>,
+        progress: Option<f32>,
+    ) -> Result<(), String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        // progress stored in error field prefix when not an error — use app_settings per job instead
+        // Keep it simple: add progress column via migration
+        let _ = progress;
+        conn.execute(
+            "UPDATE ingest_jobs SET status = ?2, output_path = COALESCE(?3, output_path), error = ?4 WHERE id = ?1",
+            params![id, status, output_path, error],
+        )
+        .map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    pub fn get_ingest_jobs(&self) -> Result<Vec<IngestJob>, String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, source_url, status, output_path, error FROM ingest_jobs ORDER BY rowid DESC LIMIT 20",
+            )
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok(IngestJob {
+                    id: row.get(0)?,
+                    source_url: row.get(1)?,
+                    status: row.get(2)?,
+                    output_path: row.get(3)?,
+                    error: row.get(4)?,
+                })
+            })
+            .map_err(|e| e.to_string())?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
+    }
+
+    // --- Playlists ---
+
+    pub fn save_playlist(
+        &self,
+        name: &str,
+        track_ids: &[String],
+        created_from: Option<&str>,
+    ) -> Result<String, String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let id = Uuid::new_v4().to_string();
+        let now = Utc::now().to_rfc3339();
+        conn.execute(
+            "INSERT INTO playlists (id, name, created_from, created_at) VALUES (?1, ?2, ?3, ?4)",
+            params![id, name, created_from, now],
+        )
+        .map_err(|e| e.to_string())?;
+        for (pos, track_id) in track_ids.iter().enumerate() {
+            conn.execute(
+                "INSERT INTO playlist_tracks (playlist_id, track_id, position) VALUES (?1, ?2, ?3)",
+                params![id, track_id, pos as i32],
+            )
+            .map_err(|e| e.to_string())?;
+        }
+        Ok(id)
+    }
+
+    pub fn get_playlists(&self) -> Result<Vec<PlaylistSummary>, String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT p.id, p.name, p.created_from, p.created_at,
+                        (SELECT COUNT(*) FROM playlist_tracks pt WHERE pt.playlist_id = p.id)
+                 FROM playlists p ORDER BY p.created_at DESC",
+            )
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok(PlaylistSummary {
+                    id: row.get(0)?,
+                    name: row.get(1)?,
+                    created_from: row.get(2)?,
+                    created_at: row.get(3)?,
+                    track_count: row.get(4)?,
+                })
+            })
+            .map_err(|e| e.to_string())?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
+    }
+
+    pub fn get_playlist_track_ids(&self, playlist_id: &str) -> Result<Vec<String>, String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT track_id FROM playlist_tracks WHERE playlist_id = ?1 ORDER BY position ASC",
+            )
+            .map_err(|e| e.to_string())?;
+        let ids = stmt
+            .query_map(params![playlist_id], |row| row.get(0))
+            .map_err(|e| e.to_string())?
+            .filter_map(|r| r.ok())
+            .collect();
+        Ok(ids)
+    }
+
+    pub fn delete_playlist(&self, playlist_id: &str) -> Result<(), String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        conn.execute(
+            "DELETE FROM playlist_tracks WHERE playlist_id = ?1",
+            params![playlist_id],
+        )
+        .map_err(|e| e.to_string())?;
+        conn.execute("DELETE FROM playlists WHERE id = ?1", params![playlist_id])
+            .map_err(|e| e.to_string())?;
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IngestJob {
+    pub id: String,
+    pub source_url: String,
+    pub status: String,
+    pub output_path: Option<String>,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PlaylistSummary {
+    pub id: String,
+    pub name: String,
+    pub created_from: Option<String>,
+    pub created_at: String,
+    pub track_count: i32,
 }

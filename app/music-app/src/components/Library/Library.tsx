@@ -1,11 +1,5 @@
+import { VirtualizedTrackTable } from "./VirtualizedTrackTable";
 import type { Track } from "../../types";
-
-function fmtTime(seconds: number | null | undefined) {
-  if (!seconds || !Number.isFinite(seconds)) return "—";
-  const m = Math.floor(seconds / 60);
-  const s = Math.floor(seconds % 60);
-  return `${m}:${s < 10 ? "0" : ""}${s}`;
-}
 
 interface LibraryProps {
   tracks: Track[];
@@ -46,49 +40,14 @@ export function Library({
         </button>
       </div>
 
-      <table>
-        <thead>
-          <tr>
-            <th style={{ width: 36 }} />
-            <th>Title</th>
-            <th>Artist</th>
-            <th>Album</th>
-            <th>Mood</th>
-            <th style={{ width: 60 }}>Time</th>
-          </tr>
-        </thead>
-        <tbody>
-          {tracks.map((track) => (
-            <tr
-              key={track.id}
-              className={track.id === currentTrackId ? "playing-row" : ""}
-              onClick={() => onPlay(track.id)}
-            >
-              <td><span className="eq">♪</span></td>
-              <td className="title-cell">
-                <span className="t">{track.title}</span>
-              </td>
-              <td className="muted">{track.artist}</td>
-              <td className="muted">{track.album}</td>
-              <td>
-                <span
-                  className="mood-pill"
-                  data-mood={track.mood}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onMoodClick(track.id);
-                  }}
-                >
-                  {track.mood}
-                </span>
-              </td>
-              <td className="muted">{fmtTime(track.duration_sec)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-
-      {tracks.length === 0 && (
+      {tracks.length > 0 ? (
+        <VirtualizedTrackTable
+          tracks={tracks}
+          currentTrackId={currentTrackId}
+          onPlay={onPlay}
+          onMoodClick={onMoodClick}
+        />
+      ) : (
         <div className="empty-state">
           No tracks yet. Point it at a folder of FLAC/MP3 files — nested composer
           folders, loose downloads, whatever shape it&apos;s already in.

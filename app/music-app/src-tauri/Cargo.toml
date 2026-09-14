@@ -24,7 +24,7 @@ lofty = "0.22"
 uuid = { version = "1", features = ["v4"] }
 chrono = { version = "0.4", features = ["serde"] }
 reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
-tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "process", "io-util"] }
 dirs = "6"
 thiserror = "2"
 regex = "1"

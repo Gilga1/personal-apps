@@ -1,31 +1,88 @@
 import { convertFileSrc } from "@tauri-apps/api/core";
 
+const CROSSFADE_MS = 300;
+
 class AudioEngine {
-  private audio: HTMLAudioElement;
+  private audioA: HTMLAudioElement;
+  private audioB: HTMLAudioElement;
+  private activeIsA = true;
   private audioCtx: AudioContext | null = null;
   private analyser: AnalyserNode | null = null;
+  private sourceA: MediaElementAudioSourceNode | null = null;
+  private sourceB: MediaElementAudioSourceNode | null = null;
   private dataArray: Uint8Array<ArrayBuffer> | null = null;
   private rafId: number | null = null;
   private playing = false;
+  private crossfadeEnabled = true;
+  private masterVolume = 0.8;
+  private crossfadeToken = 0;
 
   constructor() {
-    this.audio = new Audio();
-    this.audio.preload = "metadata";
+    this.audioA = new Audio();
+    this.audioB = new Audio();
+    this.audioA.preload = "metadata";
+    this.audioB.preload = "metadata";
     this.startGlowLoop();
   }
 
   get element() {
-    return this.audio;
+    return this.activeIsA ? this.audioA : this.audioB;
   }
 
   setPlaying(playing: boolean) {
     this.playing = playing;
   }
 
-  async loadTrack(filePath: string) {
+  setCrossfadeEnabled(enabled: boolean) {
+    this.crossfadeEnabled = enabled;
+  }
+
+  async loadAndPlay(filePath: string) {
     this.ensureGraph();
-    this.audio.src = convertFileSrc(filePath);
-    await this.audio.load();
+    const incoming = this.activeIsA ? this.audioB : this.audioA;
+    const outgoing = this.activeIsA ? this.audioA : this.audioB;
+    const isFirstTrack = !outgoing.src && !incoming.src;
+
+    incoming.src = convertFileSrc(filePath);
+    await incoming.load();
+
+    if (this.audioCtx?.state === "suspended") {
+      await this.audioCtx.resume();
+    }
+
+    if (isFirstTrack || !this.crossfadeEnabled || outgoing.paused) {
+      outgoing.pause();
+      outgoing.volume = 0;
+      incoming.volume = this.masterVolume;
+      await incoming.play();
+      this.activeIsA = !this.activeIsA;
+      this.playing = true;
+      return;
+    }
+
+    const token = ++this.crossfadeToken;
+    incoming.volume = 0;
+    await incoming.play();
+
+    const start = performance.now();
+    const outStartVol = outgoing.volume;
+
+    const fade = () => {
+      if (token !== this.crossfadeToken) return;
+      const t = Math.min(1, (performance.now() - start) / CROSSFADE_MS);
+      outgoing.volume = outStartVol * (1 - t);
+      incoming.volume = this.masterVolume * t;
+      if (t < 1) {
+        requestAnimationFrame(fade);
+      } else {
+        outgoing.pause();
+        outgoing.volume = 0;
+        incoming.volume = this.masterVolume;
+        this.activeIsA = !this.activeIsA;
+      }
+    };
+    requestAnimationFrame(fade);
+    this.playing = true;
   }
 
   async play() {
@@ -33,32 +90,38 @@ class AudioEngine {
     if (this.audioCtx?.state === "suspended") {
       await this.audioCtx.resume();
     }
-    await this.audio.play();
+    await this.element.play();
     this.playing = true;
   }
 
   pause() {
-    this.audio.pause();
+    this.crossfadeToken++;
+    this.audioA.pause();
+    this.audioB.pause();
     this.playing = false;
   }
 
   setVolume(volume: number) {
-    this.audio.volume = volume;
+    this.masterVolume = volume;
+    this.element.volume = volume;
   }
 
   seek(ratio: number) {
-    if (this.audio.duration) {
-      this.audio.currentTime = ratio * this.audio.duration;
+    const el = this.element;
+    if (el.duration) {
+      el.currentTime = ratio * el.duration;
     }
   }
 
   private ensureGraph() {
     if (this.audioCtx) return;
     this.audioCtx = new AudioContext();
-    const source = this.audioCtx.createMediaElementSource(this.audio);
+    this.sourceA = this.audioCtx.createMediaElementSource(this.audioA);
+    this.sourceB = this.audioCtx.createMediaElementSource(this.audioB);
     this.analyser = this.audioCtx.createAnalyser();
     this.analyser.fftSize = 256;
-    source.connect(this.analyser);
+    this.sourceA.connect(this.analyser);
+    this.sourceB.connect(this.analyser);
     this.analyser.connect(this.audioCtx.destination);
     this.dataArray = new Uint8Array(this.analyser.frequencyBinCount);
   }
@@ -94,8 +157,8 @@ class AudioEngine {
 
   destroy() {
     if (this.rafId) cancelAnimationFrame(this.rafId);
-    this.audio.pause();
-    this.audio.src = "";
+    this.audioA.pause();
+    this.audioB.pause();
   }
 }
 

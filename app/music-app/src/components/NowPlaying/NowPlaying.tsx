@@ -13,6 +13,7 @@ interface NowPlayingProps {
   track: Track | null;
   isPlaying: boolean;
   shuffleOn: boolean;
+  crossfadeOn: boolean;
   currentTime: number;
   duration: number;
   volume: number;
@@ -21,6 +22,7 @@ interface NowPlayingProps {
   onPrev: () => void;
   onNext: () => void;
   onShuffle: () => void;
+  onCrossfade: () => void;
   onSeek: (ratio: number) => void;
   onVolume: (volume: number) => void;
   onMoodFilter: (mood: string | null) => void;
@@ -30,6 +32,7 @@ export function NowPlaying({
   track,
   isPlaying,
   shuffleOn,
+  crossfadeOn,
   currentTime,
   duration,
   volume,
@@ -38,6 +41,7 @@ export function NowPlaying({
   onPrev,
   onNext,
   onShuffle,
+  onCrossfade,
   onSeek,
   onVolume,
   onMoodFilter,
@@ -97,6 +101,14 @@ export function NowPlaying({
             title="Shuffle"
           >
             ⤮
+          </button>
+          <button
+            type="button"
+            className={crossfadeOn ? "active" : ""}
+            onClick={onCrossfade}
+            title="Crossfade"
+          >
+            ∿
           </button>
           <button type="button" onClick={onPrev} title="Previous">
             ⏮
