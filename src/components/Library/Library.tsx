@@ -1,5 +1,6 @@
-import { VirtualizedTrackTable } from "./VirtualizedTrackTable";
+import { MOODS } from "../../constants/moods";
 import type { Track } from "../../types";
+import { VirtualizedTrackTable } from "./VirtualizedTrackTable";
 
 interface LibraryProps {
   tracks: Track[];
@@ -7,12 +8,16 @@ interface LibraryProps {
   searchText: string;
   queuePrompt?: string | null;
   queueActive?: boolean;
+  selectedIds: Set<string>;
   onSearch: (text: string) => void;
   onPickFolder: () => void;
   onOpenSettings: () => void;
   onResetQueue?: () => void;
   onPlay: (trackId: string) => void;
-  onMoodClick: (trackId: string) => void;
+  onToggleSelect: (trackId: string, extendRange?: boolean) => void;
+  onSelectAll: (checked: boolean) => void;
+  onClearSelection: () => void;
+  onTagTracks: (trackIds: string[], mood: string) => void;
 }
 
 export function Library({
@@ -21,13 +26,19 @@ export function Library({
   searchText,
   queuePrompt,
   queueActive,
+  selectedIds,
   onSearch,
   onPickFolder,
   onOpenSettings,
   onResetQueue,
   onPlay,
-  onMoodClick,
+  onToggleSelect,
+  onSelectAll,
+  onClearSelection,
+  onTagTracks,
 }: LibraryProps) {
+  const selectionCount = selectedIds.size;
+
   return (
     <section className="library">
       {queueActive && queuePrompt && (
@@ -46,6 +57,38 @@ export function Library({
               ↺
             </button>
           )}
+        </div>
+      )}
+
+      {selectionCount > 0 && (
+        <div className="tag-toolbar">
+          <span>
+            {selectionCount} track{selectionCount === 1 ? "" : "s"} selected
+          </span>
+          <div className="tag-toolbar-moods">
+            {MOODS.map((mood) => (
+              <button
+                key={mood}
+                type="button"
+                className="mood-chip compact"
+                data-mood={mood}
+                onClick={() => onTagTracks(Array.from(selectedIds), mood)}
+              >
+                {mood}
+              </button>
+            ))}
+            <button
+              type="button"
+              className="mood-chip compact"
+              data-mood="Unsorted"
+              onClick={() => onTagTracks(Array.from(selectedIds), "Unsorted")}
+            >
+              Unsorted
+            </button>
+          </div>
+          <button type="button" className="file-btn" onClick={onClearSelection}>
+            Clear
+          </button>
         </div>
       )}
 
@@ -69,8 +112,11 @@ export function Library({
         <VirtualizedTrackTable
           tracks={tracks}
           currentTrackId={currentTrackId}
+          selectedIds={selectedIds}
           onPlay={onPlay}
-          onMoodClick={onMoodClick}
+          onToggleSelect={onToggleSelect}
+          onSelectAll={onSelectAll}
+          onTagTracks={onTagTracks}
         />
       ) : (
         <div className="empty-state">

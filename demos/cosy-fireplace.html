@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Stacks — Cosy Fireplace Concept</title>
+  <style>
+    :root {
+      --wall: #3d2a1f;
+      --wall-light: #5c4030;
+      --wood: #2a1810;
+      --ember: #ff8c3a;
+      --flame: #ffd166;
+      --flame-hot: #fff1a8;
+      --glow: rgba(255, 140, 58, 0.35);
+      --text: #f5e8d6;
+      --muted: #c4a484;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: radial-gradient(ellipse at 50% 120%, #1a0f0a 0%, #0d0806 70%);
+      font-family: Georgia, "Iowan Old Style", "Palatino Linotype", serif;
+      color: var(--text);
+      overflow: hidden;
+    }
+
+    .room {
+      position: relative;
+      width: min(920px, 96vw);
+      height: min(620px, 90vh);
+      border-radius: 18px;
+      overflow: hidden;
+      box-shadow:
+        0 30px 80px rgba(0, 0, 0, 0.65),
+        inset 0 0 120px rgba(255, 140, 58, 0.06);
+      background:
+        linear-gradient(180deg, #2a1c14 0%, #1a100c 55%, #120a07 100%);
+    }
+
+    /* Warm room wash from fire */
+    .room::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(
+        500px 380px at 50% 78%,
+        rgba(255, 120, 40, 0.22) 0%,
+        rgba(255, 80, 20, 0.08) 35%,
+        transparent 70%
+      );
+      pointer-events: none;
+      animation: room-glow 4s ease-in-out infinite alternate;
+    }
+
+    @keyframes room-glow {
+      from { opacity: 0.85; }
+      to { opacity: 1; }
+    }
+
+    .wall-panel {
+      position: absolute;
+      inset: 0 0 28% 0;
+      background:
+        repeating-linear-gradient(
+          90deg,
+          transparent 0 48px,
+          rgba(0, 0, 0, 0.08) 48px 50px
+        ),
+        linear-gradient(180deg, var(--wall-light), var(--wall));
+    }
+
+    .mantel {
+      position: absolute;
+      left: 50%;
+      bottom: 28%;
+      transform: translateX(-50%);
+      width: 72%;
+      height: 18px;
+      background: linear-gradient(180deg, #6b4a35, #3d281c);
+      border-radius: 4px 4px 0 0;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    }
+
+    .fireplace {
+      position: absolute;
+      left: 50%;
+      bottom: 8%;
+      transform: translateX(-50%);
+      width: 58%;
+      height: 42%;
+    }
+
+    .fireplace-arch {
+      position: absolute;
+      inset: 0;
+      background: #1a100c;
+      border-radius: 120px 120px 8px 8px;
+      border: 14px solid #4a3224;
+      border-bottom-width: 22px;
+      box-shadow:
+        inset 0 20px 50px rgba(0, 0, 0, 0.8),
+        0 8px 24px rgba(0, 0, 0, 0.5);
+    }
+
+    .fireplace-inner {
+      position: absolute;
+      left: 10%;
+      right: 10%;
+      bottom: 8%;
+      top: 18%;
+      border-radius: 80px 80px 4px 4px;
+      background: linear-gradient(180deg, #0a0604, #150c08);
+      overflow: hidden;
+    }
+
+    .logs {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 28%;
+      background:
+        radial-gradient(ellipse at 30% 80%, #3d2214 0%, transparent 55%),
+        radial-gradient(ellipse at 70% 70%, #2a1810 0%, transparent 50%);
+    }
+
+    .log {
+      position: absolute;
+      bottom: 8%;
+      height: 22px;
+      border-radius: 999px;
+      background: linear-gradient(180deg, #4a2e1e, #1f120a);
+      box-shadow: inset 0 -3px 6px rgba(0, 0, 0, 0.5);
+    }
+
+    .log-1 { left: 12%; width: 42%; transform: rotate(-4deg); }
+    .log-2 { right: 10%; width: 38%; transform: rotate(6deg); bottom: 14%; }
+    .log-3 { left: 32%; width: 36%; transform: rotate(2deg); bottom: 18%; height: 18px; }
+
+    .embers {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+    }
+
+    .ember {
+      position: absolute;
+      width: 3px;
+      height: 3px;
+      border-radius: 50%;
+      background: var(--ember);
+      opacity: 0;
+      animation: float-ember 3s ease-in infinite;
+    }
+
+    @keyframes float-ember {
+      0% { transform: translateY(0) scale(1); opacity: 0; }
+      15% { opacity: 0.9; }
+      100% { transform: translateY(-80px) translateX(12px) scale(0.2); opacity: 0; }
+    }
+
+    .fire {
+      position: absolute;
+      left: 50%;
+      bottom: 22%;
+      transform: translateX(-50%);
+      width: 55%;
+      height: 55%;
+      filter: blur(0.3px);
+    }
+
+    .flame {
+      position: absolute;
+      bottom: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%;
+      transform-origin: bottom center;
+      animation: flicker 0.8s ease-in-out infinite alternate;
+    }
+
+    .flame-main {
+      width: 70%;
+      height: 85%;
+      background: radial-gradient(ellipse at 50% 90%, var(--ember), var(--flame) 45%, transparent 72%);
+      animation-duration: 0.65s;
+    }
+
+    .flame-left {
+      width: 42%;
+      height: 62%;
+      left: 28%;
+      background: radial-gradient(ellipse at 50% 90%, #e85d04, var(--flame) 50%, transparent 75%);
+      animation-duration: 0.9s;
+      animation-delay: -0.2s;
+    }
+
+    .flame-right {
+      width: 38%;
+      height: 58%;
+      left: 62%;
+      background: radial-gradient(ellipse at 50% 90%, #dc5a12, #ffb347 55%, transparent 78%);
+      animation-duration: 0.75s;
+      animation-delay: -0.35s;
+    }
+
+    .flame-core {
+      width: 28%;
+      height: 40%;
+      background: radial-gradient(ellipse at 50% 90%, #fff8e7, var(--flame-hot) 60%, transparent 80%);
+      animation-duration: 0.5s;
+      filter: blur(1px);
+    }
+
+    @keyframes flicker {
+      0% { transform: translateX(-50%) scaleX(1) scaleY(1); opacity: 0.92; }
+      25% { transform: translateX(-49%) scaleX(1.04) scaleY(1.03); opacity: 1; }
+      50% { transform: translateX(-51%) scaleX(0.96) scaleY(0.98); opacity: 0.88; }
+      75% { transform: translateX(-50%) scaleX(1.02) scaleY(1.05); opacity: 0.96; }
+      100% { transform: translateX(-50%) scaleX(0.98) scaleY(0.94); opacity: 0.9; }
+    }
+
+    .floor {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: 28%;
+      background:
+        repeating-linear-gradient(
+          92deg,
+          rgba(0, 0, 0, 0.15) 0 3px,
+          transparent 3px 68px
+        ),
+        linear-gradient(180deg, #2a1810, #1a0f0a);
+    }
+
+    .rug {
+      position: absolute;
+      left: 50%;
+      bottom: 4%;
+      transform: translateX(-50%);
+      width: 50%;
+      height: 12%;
+      border-radius: 50%;
+      background: radial-gradient(ellipse, #5c2e32 0%, #3a1c20 55%, transparent 72%);
+      opacity: 0.7;
+    }
+
+    .shelf {
+      position: absolute;
+      top: 22%;
+      left: 8%;
+      width: 22%;
+      height: 8px;
+      background: #4a3224;
+      border-radius: 2px;
+      box-shadow: 0 6px 0 #3a281c;
+    }
+
+    .shelf::after {
+      content: "";
+      position: absolute;
+      left: 20%;
+      top: -28px;
+      width: 18px;
+      height: 28px;
+      border-radius: 2px;
+      background: linear-gradient(90deg, #6b3f52, #4a2a38);
+      box-shadow: 18px 4px 0 #5a4a38, 36px -2px 0 #7a5a42;
+    }
+
+    .window {
+      position: absolute;
+      top: 14%;
+      right: 10%;
+      width: 18%;
+      height: 22%;
+      border: 6px solid #3d281c;
+      border-radius: 4px;
+      background: linear-gradient(180deg, #0a1428 0%, #152238 100%);
+      box-shadow: inset 0 0 20px rgba(100, 140, 200, 0.15);
+    }
+
+    .window::before,
+    .window::after {
+      content: "";
+      position: absolute;
+      background: #3d281c;
+    }
+
+    .window::before {
+      left: 50%;
+      top: 0;
+      bottom: 0;
+      width: 4px;
+      transform: translateX(-50%);
+    }
+
+    .window::after {
+      top: 50%;
+      left: 0;
+      right: 0;
+      height: 4px;
+      transform: translateY(-50%);
+    }
+
+    .moon {
+      position: absolute;
+      top: 18%;
+      right: 22%;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 35% 35%, #fff8e0, #d4c4a0);
+      box-shadow: 0 0 24px rgba(255, 248, 220, 0.25);
+    }
+
+    .title-card {
+      position: absolute;
+      top: 6%;
+      left: 6%;
+      max-width: 42%;
+    }
+
+    .title-card h1 {
+      font-size: clamp(1.4rem, 3vw, 2rem);
+      font-weight: normal;
+      letter-spacing: 0.02em;
+      text-shadow: 0 2px 12px rgba(0, 0, 0, 0.5);
+    }
+
+    .title-card p {
+      margin-top: 8px;
+      font-size: 0.95rem;
+      color: var(--muted);
+      font-style: italic;
+      line-height: 1.5;
+    }
+
+    .player-hint {
+      position: absolute;
+      bottom: 6%;
+      right: 6%;
+      padding: 12px 16px;
+      border-radius: 12px;
+      border: 1px solid rgba(245, 232, 214, 0.12);
+      background: rgba(20, 12, 8, 0.55);
+      backdrop-filter: blur(6px);
+      font-size: 0.85rem;
+      color: var(--muted);
+      max-width: 220px;
+      line-height: 1.45;
+    }
+
+    .player-hint strong {
+      display: block;
+      color: var(--text);
+      font-weight: normal;
+      margin-bottom: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div class="room" role="img" aria-label="Cosy room with animated fireplace">
+    <div class="wall-panel"></div>
+    <div class="moon" aria-hidden="true"></div>
+    <div class="window" aria-hidden="true"></div>
+    <div class="shelf" aria-hidden="true"></div>
+
+    <div class="title-card">
+      <h1>Stacks — fireside concept</h1>
+      <p>A warm parlour vignette inspired by hand-painted animation — fireplace glow, wood panelling, night outside the window.</p>
+    </div>
+
+    <div class="mantel" aria-hidden="true"></div>
+
+    <div class="fireplace">
+      <div class="fireplace-arch"></div>
+      <div class="fireplace-inner">
+        <div class="logs">
+          <div class="log log-1"></div>
+          <div class="log log-2"></div>
+          <div class="log log-3"></div>
+        </div>
+        <div class="fire" aria-hidden="true">
+          <div class="flame flame-left"></div>
+          <div class="flame flame-right"></div>
+          <div class="flame flame-main"></div>
+          <div class="flame flame-core"></div>
+        </div>
+        <div class="embers" id="embers"></div>
+      </div>
+    </div>
+
+    <div class="rug" aria-hidden="true"></div>
+    <div class="floor" aria-hidden="true"></div>
+
+    <div class="player-hint">
+      <strong>Concept only</strong>
+      Preview for a cosy background behind the turntable — not wired into the app yet.
+    </div>
+  </div>
+
+  <script>
+    const embersEl = document.getElementById("embers");
+    for (let i = 0; i < 18; i++) {
+      const e = document.createElement("span");
+      e.className = "ember";
+      e.style.left = `${35 + Math.random() * 30}%`;
+      e.style.bottom = `${18 + Math.random() * 12}%`;
+      e.style.animationDelay = `${Math.random() * 3}s`;
+      e.style.animationDuration = `${2.2 + Math.random() * 2}s`;
+      embersEl.appendChild(e);
+    }
+  </script>
+</body>
+</html>

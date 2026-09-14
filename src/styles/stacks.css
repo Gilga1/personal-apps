@@ -691,6 +691,81 @@ tr.playing-row .eq {
   white-space: nowrap;
 }
 
+tr.selected-row {
+  background: rgba(227, 167, 88, 0.08);
+}
+
+.tag-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: rgba(45, 33, 22, 0.65);
+}
+
+.tag-toolbar-moods {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.mood-chip.compact {
+  font-size: 11px;
+  padding: 4px 10px;
+}
+
+.mood-picker {
+  position: fixed;
+  z-index: 1000;
+  min-width: 180px;
+  padding: 8px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--panel-alt);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+}
+
+.mood-picker-label {
+  margin: 0 0 6px;
+  padding: 0 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.mood-picker-option {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.mood-picker-option:hover {
+  background: rgba(227, 167, 88, 0.12);
+}
+
+.ingest-job {
+  display: grid;
+  gap: 8px;
+}
+
+.ingest-cancel-btn {
+  align-self: start;
+  font-size: 12px;
+  padding: 4px 10px;
+}
+
 .empty-state {
   text-align: center;
   color: var(--text-muted);

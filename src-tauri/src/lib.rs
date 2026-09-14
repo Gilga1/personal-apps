@@ -30,6 +30,7 @@ pub fn run() {
             app.manage(AppState {
                 db: Arc::new(db),
                 data_dir,
+                ingest_registry: Arc::new(ingest::IngestJobRegistry::default()),
             });
             Ok(())
         })
@@ -38,6 +39,8 @@ pub fn run() {
             commands::scan_library,
             commands::get_tracks,
             commands::set_track_mood,
+            commands::set_tracks_mood,
+            commands::cancel_ingest,
             commands::get_llm_config,
             commands::set_llm_config,
             commands::test_llm_connection,
