@@ -2,7 +2,7 @@
 
 A collection of small, private tools. **Each app is a self-contained project on its own branch** — its own dependencies, versions, and build tooling. Nothing is shared at runtime.
 
-This `main` branch is only an index. It has no app code and no `package.json` / `requirements.txt`.
+This `main` branch is only an index. It has no `app/` folder, no app code, and no shared lockfiles.
 
 ## Apps
 
@@ -14,19 +14,28 @@ This `main` branch is only an index. It has no app code and no `package.json` / 
 
 ## Working on an app
 
-Check out the app branch. All code and dependencies for that app live on that branch only:
+Check out the app branch. **The app code is at the branch root** (not nested under `app/<name>/`):
 
 ```bash
-git checkout app/nutrition-app   # ThaliScan
-git checkout app/stress-buster     # Breathe
-git checkout app/music-app         # Stacks
+git checkout app/nutrition-app   # ThaliScan → backend/, frontend/ at root
+git checkout app/stress-buster     # Breathe → frontend/ at root
+git checkout app/music-app         # Stacks → src/, src-tauri/, Dockerfile at root
 ```
 
-Then follow the README on that branch for setup and run instructions.
+Then follow that branch's README for setup and run instructions.
 
-### Why branches, not folders on main?
+### Branch layout
 
-Each app can pin different library versions (Node, Python, Rust crates, etc.) without conflicting with the others. `main` stays a lightweight guide — not a monorepo with shared `node_modules` or a root lockfile.
+```
+main/                  ← this index only (README, LICENSE)
+app/music-app/         ← Stacks lives at THIS branch's root
+app/nutrition-app/     ← ThaliScan at that branch's root
+app/stress-buster/     ← Breathe at that branch's root
+```
+
+### Why separate branches?
+
+Each app can pin different library versions without conflicting. Checking out one branch never pulls another app's code or dependencies.
 
 ## License
 
