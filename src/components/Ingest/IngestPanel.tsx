@@ -14,6 +14,11 @@ interface IngestPanelProps {
   onPlaylistImported?: (trackIds: string[]) => void;
 }
 
+type JobProgress = {
+  progress: number;
+  message: string;
+};
+
 export function IngestPanel({
   onIngestComplete,
   onPlaylistImported,
@@ -21,6 +26,7 @@ export function IngestPanel({
   const [url, setUrl] = useState("");
   const [playlistName, setPlaylistName] = useState("");
   const [jobs, setJobs] = useState<IngestJob[]>([]);
+  const [jobProgress, setJobProgress] = useState<Record<string, JobProgress>>({});
   const [ytdlpOk, setYtdlpOk] = useState(true);
   const [preparing, setPreparing] = useState(false);
   const onCompleteRef = useRef(onIngestComplete);
@@ -37,11 +43,11 @@ export function IngestPanel({
     setJobs(list);
   };
 
-  // Run setup once on mount — never re-run on parent re-renders (playback ticks).
   useEffect(() => {
     let cancelled = false;
     let unlistenFn: (() => void) | undefined;
     let toastId: string | null = null;
+    let activeJobId: string | null = null;
     const { push, update, dismiss } = useToastStore.getState();
 
     (async () => {
@@ -68,18 +74,33 @@ export function IngestPanel({
         if (cancelled) return;
         unlistenFn = await listen<IngestProgressEvent>("ingest-progress", (ev) => {
           const p = ev.payload;
+          activeJobId = p.job_id;
+          setJobProgress((prev) => ({
+            ...prev,
+            [p.job_id]: { progress: p.progress, message: p.message },
+          }));
+
           if (!toastId) {
-            toastId = push("Starting YouTube import…", "progress", p.progress);
+            toastId = push(p.message, "progress", p.progress);
           } else {
             update(toastId, p.message, "progress", p.progress);
           }
+
           if (p.status === "done") {
             if (toastId) {
               update(toastId, p.message, "success", 100);
               setTimeout(() => toastId && dismiss(toastId), 4000);
+              toastId = null;
             }
             if (p.track_ids?.length) {
               onPlaylistRef.current?.(p.track_ids);
+            }
+            if (activeJobId) {
+              setJobProgress((prev) => {
+                const next = { ...prev };
+                delete next[activeJobId!];
+                return next;
+              });
             }
             refresh();
             onCompleteRef.current();
@@ -88,6 +109,14 @@ export function IngestPanel({
             if (toastId) {
               update(toastId, p.message, "error");
               setTimeout(() => toastId && dismiss(toastId), 5000);
+              toastId = null;
+            }
+            if (activeJobId) {
+              setJobProgress((prev) => {
+                const next = { ...prev };
+                delete next[activeJobId!];
+                return next;
+              });
             }
             refresh();
           }
@@ -149,6 +178,10 @@ export function IngestPanel({
           Import
         </button>
       </div>
+      <p className="ingest-hint">
+        Mix/Radio links import the current video only. Regular playlists import
+        up to 50 tracks.
+      </p>
       {preparing && (
         <p className="ingest-hint">Setting up YouTube import (one-time)…</p>
       )}
@@ -159,21 +192,29 @@ export function IngestPanel({
       )}
       {activeJobs.length > 0 && (
         <div className="ingest-jobs">
-          {activeJobs.map((job) => (
-            <div key={job.id} className="ingest-job">
-              <div className="ingest-job-head">
-                <span className="ingest-status">{job.status}</span>
-                <span className="ingest-url">
-                  {job.source_url.length > 60
-                    ? `${job.source_url.slice(0, 60)}…`
-                    : job.source_url}
-                </span>
+          {activeJobs.map((job) => {
+            const live = jobProgress[job.id];
+            const progress = live?.progress ?? (job.status === "queued" ? 0 : 5);
+            const message =
+              live?.message ??
+              (job.status === "queued"
+                ? "Queued…"
+                : `Downloading ${job.source_url.slice(0, 48)}…`);
+            return (
+              <div key={job.id} className="ingest-job">
+                <div className="ingest-job-head">
+                  <span className="ingest-status">{job.status}</span>
+                  <span className="ingest-url">{message}</span>
+                </div>
+                <div className="ingest-bar">
+                  <div
+                    className="ingest-bar-fill"
+                    style={{ width: `${Math.min(100, Math.max(0, progress))}%` }}
+                  />
+                </div>
               </div>
-              <div className="ingest-bar">
-                <div className="ingest-bar-fill" style={{ width: "60%" }} />
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

@@ -1,3 +1,4 @@
+pub mod url_plan;
 pub mod ytdlp;
 
 use crate::library::db::Database;
@@ -48,7 +49,12 @@ pub async fn run_youtube_ingest(
         }
     };
 
-    emit("downloading", 0.0, "Starting download…", None, &[], None);
+    let plan = ytdlp::build_download_plan(&url);
+    if let Some(notice) = &plan.notice {
+        emit("downloading", 0.0, notice, None, &[], None);
+    } else {
+        emit("downloading", 0.0, "Starting download…", None, &[], None);
+    }
 
     let output_dir = ytdlp::ingest_dir(&data_dir).join(&job_id);
 
