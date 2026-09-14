@@ -72,6 +72,26 @@ fn read_duration(path: &Path) -> Option<f64> {
         .map(|f| f.properties().duration().as_secs_f64())
 }
 
+#[derive(Debug, Clone)]
+pub struct FilenameGuess {
+    pub title: String,
+    pub artist: String,
+    pub album: String,
+    pub year: Option<i32>,
+    pub genre: Option<String>,
+}
+
+pub fn guess_from_filename(filename: &str, folder_name: Option<&str>) -> FilenameGuess {
+    let fallback = parse_filename_fallback(filename, folder_name);
+    FilenameGuess {
+        title: fallback.title,
+        artist: fallback.artist,
+        album: fallback.album,
+        year: fallback.year,
+        genre: fallback.genre,
+    }
+}
+
 struct FilenameFallback {
     title: String,
     artist: String,

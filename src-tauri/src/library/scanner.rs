@@ -44,7 +44,7 @@ pub fn scan_directory(db: &Database, root: &Path) -> Result<u32, String> {
                 continue;
             }
         };
-        let mood = classify_mood(&parsed, folder_name);
+        let mood = classify_mood(&parsed, folder_name).mood;
         let format = ext.unwrap_or_else(|| "unknown".to_string());
 
         if let Err(err) = db.upsert_track(

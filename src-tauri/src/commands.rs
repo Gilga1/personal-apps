@@ -1,5 +1,6 @@
 use crate::ingest::{self, ytdlp};
 use crate::library::db::{Database, IngestJob, PlaylistSummary, Track};
+use crate::library::enrich::{enrich_filename_tracks, rule_tag_unsorted_tracks};
 use crate::library::mood::next_mood;
 use crate::library::scanner::scan_directory;
 use crate::llm::config::{load_config_from_db, save_config_to_db, LlmConfig};
@@ -123,48 +124,55 @@ struct EnrichProgressEvent {
     message: String,
 }
 
+#[derive(serde::Serialize, Clone)]
+pub struct EnrichResult {
+    pub rule_tagged: u32,
+    pub total: u32,
+    pub rule_enriched: u32,
+    pub llm_enriched: u32,
+    pub failed: u32,
+    pub last_error: Option<String>,
+}
+
 #[tauri::command]
 pub async fn normalize_low_confidence(
     app: AppHandle,
     state: State<'_, AppState>,
-) -> Result<u32, String> {
-    let ids = state.db.get_low_confidence_track_ids()?;
+) -> Result<EnrichResult, String> {
     let config = load_config_from_db(&state.db);
-    let total = ids.len() as u32;
-    let mut count = 0u32;
 
-    for (i, id) in ids.iter().enumerate() {
-        let current = i as u32 + 1;
-        if let Ok(Some(track)) = state.db.get_track_by_id(id) {
-            let _ = app.emit(
-                "enrich-progress",
-                EnrichProgressEvent {
-                    current,
-                    total,
-                    message: format!("Enriching {} — {}", track.artist, track.title),
-                },
-            );
-            let raw_name = std::path::Path::new(&track.file_path)
-                .file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or(&track.title);
-            if let Ok(normalized) = normalize_filename(&config, raw_name).await {
-                let _ = state.db.apply_llm_enrichment(
-                    id,
-                    &normalized.title,
-                    &normalized.artist,
-                    &normalized.album,
-                    normalized.release_year,
-                    normalized.genre.as_deref(),
-                    &normalized.moods,
-                    normalized.energy_score,
-                    &normalized.situational_tags,
-                );
-                count += 1;
-            }
-        }
-    }
-    Ok(count)
+    let _ = app.emit(
+        "enrich-progress",
+        EnrichProgressEvent {
+            current: 0,
+            total: 1,
+            message: "Keyword-tagging Unsorted tracks…".to_string(),
+        },
+    );
+    let rule_summary = rule_tag_unsorted_tracks(&state.db)?;
+
+    let total = state.db.get_low_confidence_track_ids()?.len() as u32;
+
+    let filename_summary = enrich_filename_tracks(&state.db, &config, |current, total, message| {
+        let _ = app.emit(
+            "enrich-progress",
+            EnrichProgressEvent {
+                current,
+                total,
+                message,
+            },
+        );
+    })
+    .await?;
+
+    Ok(EnrichResult {
+        rule_tagged: rule_summary.tagged,
+        total,
+        rule_enriched: filename_summary.rule_enriched,
+        llm_enriched: filename_summary.llm_enriched,
+        failed: filename_summary.failed,
+        last_error: filename_summary.last_error,
+    })
 }
 
 #[tauri::command]

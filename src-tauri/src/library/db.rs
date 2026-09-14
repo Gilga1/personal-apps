@@ -360,6 +360,132 @@ impl Database {
         Ok(ids)
     }
 
+    pub fn get_unsorted_track_ids(&self) -> Result<Vec<String>, String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT t.id FROM tracks t
+                 LEFT JOIN track_moods m ON m.track_id = t.id
+                 WHERE COALESCE(m.mood, 'Unsorted') = 'Unsorted'
+                   AND COALESCE(m.source, 'rule_engine') != 'manual_override'",
+            )
+            .map_err(|e| e.to_string())?;
+        let ids = stmt
+            .query_map([], |row| row.get(0))
+            .map_err(|e| e.to_string())?
+            .filter_map(|r| r.ok())
+            .collect();
+        Ok(ids)
+    }
+
+    pub fn apply_rule_tagging(
+        &self,
+        track_id: &str,
+        mood: &str,
+        situational_tags: &[String],
+        energy_score: Option<i32>,
+    ) -> Result<(), String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+
+        let mood_source: Option<String> = conn
+            .query_row(
+                "SELECT source FROM track_moods WHERE track_id = ?1 LIMIT 1",
+                params![track_id],
+                |row| row.get(0),
+            )
+            .ok();
+
+        if mood_source.as_deref() == Some("manual_override") {
+            return Ok(());
+        }
+
+        if mood != "Unsorted" {
+            conn.execute(
+                "DELETE FROM track_moods WHERE track_id = ?1",
+                params![track_id],
+            )
+            .map_err(|e| e.to_string())?;
+            conn.execute(
+                "INSERT INTO track_moods (track_id, mood, source, energy_score) VALUES (?1, ?2, 'rule_engine', ?3)",
+                params![track_id, mood, energy_score],
+            )
+            .map_err(|e| e.to_string())?;
+        }
+
+        if !situational_tags.is_empty() {
+            conn.execute(
+                "DELETE FROM situational_tags WHERE track_id = ?1",
+                params![track_id],
+            )
+            .map_err(|e| e.to_string())?;
+            for tag in situational_tags {
+                conn.execute(
+                    "INSERT INTO situational_tags (track_id, tag) VALUES (?1, ?2)",
+                    params![track_id, tag],
+                )
+                .map_err(|e| e.to_string())?;
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn apply_rule_metadata_enrichment(
+        &self,
+        track_id: &str,
+        title: &str,
+        artist: &str,
+        album: &str,
+        mood: &str,
+        situational_tags: &[String],
+        energy_score: Option<i32>,
+    ) -> Result<(), String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        conn.execute(
+            "UPDATE tracks SET title = ?2, artist = ?3, album = ?4, tag_source = 'rule_normalized' WHERE id = ?1",
+            params![track_id, title, artist, album],
+        )
+        .map_err(|e| e.to_string())?;
+
+        let mood_source: Option<String> = conn
+            .query_row(
+                "SELECT source FROM track_moods WHERE track_id = ?1 LIMIT 1",
+                params![track_id],
+                |row| row.get(0),
+            )
+            .ok();
+
+        if mood_source.as_deref() != Some("manual_override") && mood != "Unsorted" {
+            conn.execute(
+                "DELETE FROM track_moods WHERE track_id = ?1",
+                params![track_id],
+            )
+            .map_err(|e| e.to_string())?;
+            conn.execute(
+                "INSERT INTO track_moods (track_id, mood, source, energy_score) VALUES (?1, ?2, 'rule_engine', ?3)",
+                params![track_id, mood, energy_score],
+            )
+            .map_err(|e| e.to_string())?;
+        }
+
+        if !situational_tags.is_empty() {
+            conn.execute(
+                "DELETE FROM situational_tags WHERE track_id = ?1",
+                params![track_id],
+            )
+            .map_err(|e| e.to_string())?;
+            for tag in situational_tags {
+                conn.execute(
+                    "INSERT INTO situational_tags (track_id, tag) VALUES (?1, ?2)",
+                    params![track_id, tag],
+                )
+                .map_err(|e| e.to_string())?;
+            }
+        }
+
+        Ok(())
+    }
+
     pub fn get_setting(&self, key: &str) -> Result<Option<String>, String> {
         let conn = self.conn.lock().map_err(|e| e.to_string())?;
         match conn.query_row(

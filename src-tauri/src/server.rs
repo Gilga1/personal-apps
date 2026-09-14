@@ -231,32 +231,19 @@ async fn normalize_one(
 async fn normalize_batch(
     State(state): State<AppState>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    let ids = state.db.get_low_confidence_track_ids()?;
     let config = load_config_from_db(&state.db);
-    let mut count = 0u32;
-    for id in ids {
-        if let Ok(Some(track)) = state.db.get_track_by_id(&id) {
-            let raw_name = std::path::Path::new(&track.file_path)
-                .file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or(&track.title);
-            if let Ok(normalized) = normalize_filename(&config, raw_name).await {
-                let _ = state.db.apply_llm_enrichment(
-                    &id,
-                    &normalized.title,
-                    &normalized.artist,
-                    &normalized.album,
-                    normalized.release_year,
-                    normalized.genre.as_deref(),
-                    &normalized.moods,
-                    normalized.energy_score,
-                    &normalized.situational_tags,
-                );
-                count += 1;
-            }
-        }
-    }
-    Ok(Json(serde_json::json!({ "count": count })))
+    let rule_summary = crate::library::enrich::rule_tag_unsorted_tracks(&state.db)?;
+    let total = state.db.get_low_confidence_track_ids()?.len() as u32;
+    let filename_summary =
+        crate::library::enrich::enrich_filename_tracks(&state.db, &config, |_, _, _| {}).await?;
+    Ok(Json(serde_json::json!({
+        "rule_tagged": rule_summary.tagged,
+        "total": total,
+        "rule_enriched": filename_summary.rule_enriched,
+        "llm_enriched": filename_summary.llm_enriched,
+        "failed": filename_summary.failed,
+        "last_error": filename_summary.last_error,
+    })))
 }
 
 #[cfg(feature = "server")]
