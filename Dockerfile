@@ -11,7 +11,7 @@ COPY src ./src
 RUN npm run build
 
 # --- Rust HTTP server (no Tauri / no GTK) ---
-FROM rust:1.88-bookworm AS backend
+FROM rust:1.89-bookworm AS backend
 WORKDIR /build
 RUN apt-get update && apt-get install -y --no-install-recommends pkg-config \
     && rm -rf /var/lib/apt/lists/*
