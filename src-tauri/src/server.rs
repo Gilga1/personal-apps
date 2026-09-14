@@ -335,7 +335,7 @@ async fn ingest_youtube(
     State(state): State<AppState>,
     Json(body): Json<IngestBody>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    if !ytdlp::yt_dlp_available() {
+    if !ytdlp::yt_dlp_available(&state.data_dir) {
         return Err(ApiError::bad(
             "yt-dlp not found. Install it in the container or on the host.",
         ));
@@ -346,7 +346,7 @@ async fn ingest_youtube(
     let job_id_spawn = job_id.clone();
     let url = body.url;
     tokio::spawn(async move {
-        ingest::run_youtube_ingest(db, data_dir, job_id_spawn, url, None).await;
+        ingest::run_youtube_ingest(db, data_dir, job_id_spawn, url, None, None).await;
     });
     Ok(Json(serde_json::json!({ "job_id": job_id })))
 }
@@ -361,8 +361,8 @@ async fn list_ingest_jobs(
 }
 
 #[cfg(feature = "server")]
-async fn ytdlp_status() -> Json<serde_json::Value> {
-    Json(serde_json::json!({ "available": ytdlp::yt_dlp_available() }))
+async fn ytdlp_status(State(state): State<AppState>) -> Json<serde_json::Value> {
+    Json(serde_json::json!({ "available": ytdlp::yt_dlp_available(&state.data_dir) }))
 }
 
 #[cfg(feature = "server")]

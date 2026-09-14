@@ -990,6 +990,104 @@ tr.playing-row .eq {
   margin: 0;
 }
 
+.toast-stack {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: min(420px, calc(100vw - 48px));
+  pointer-events: none;
+}
+
+.toast {
+  pointer-events: auto;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 14px;
+  box-shadow: 0 12px 32px rgba(10, 6, 3, 0.35);
+}
+
+.toast-success {
+  border-color: rgba(131, 143, 87, 0.5);
+}
+
+.toast-error {
+  border-color: rgba(184, 102, 63, 0.55);
+}
+
+.toast-progress {
+  border-color: rgba(227, 167, 88, 0.45);
+}
+
+.toast-body {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.toast-close {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  padding: 0;
+}
+
+.toast-bar {
+  height: 4px;
+  background: rgba(241, 233, 218, 0.1);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-top: 8px;
+}
+
+.toast-bar-fill {
+  height: 100%;
+  background: var(--accent-amber);
+  transition: width 0.25s ease;
+}
+
+.queue-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: rgba(219, 164, 99, 0.08);
+  border: 1px solid rgba(219, 164, 99, 0.2);
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.queue-banner strong {
+  color: var(--text);
+}
+
+.reset-queue-btn {
+  flex: 0 0 auto;
+}
+
+.ingest-playlist-row {
+  margin-top: -8px;
+}
+
+.ingest-hint {
+  color: var(--text-muted);
+  font-size: 12px;
+  margin: 0 0 12px;
+}
+
 @media (max-width: 760px) {
   .now-playing {
     grid-template-columns: 1fr;

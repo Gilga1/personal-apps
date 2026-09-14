@@ -116,33 +116,51 @@ pub async fn normalize_track(
         .ok_or_else(|| "Track not found after update".to_string())
 }
 
+#[derive(serde::Serialize, Clone)]
+struct EnrichProgressEvent {
+    current: u32,
+    total: u32,
+    message: String,
+}
+
 #[tauri::command]
-pub async fn normalize_low_confidence(state: State<'_, AppState>) -> Result<u32, String> {
+pub async fn normalize_low_confidence(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<u32, String> {
     let ids = state.db.get_low_confidence_track_ids()?;
     let config = load_config_from_db(&state.db);
+    let total = ids.len() as u32;
     let mut count = 0u32;
 
-    for id in ids {
-        if let Ok(track) = state.db.get_track_by_id(&id) {
-            if let Some(track) = track {
-                let raw_name = std::path::Path::new(&track.file_path)
-                    .file_name()
-                    .and_then(|n| n.to_str())
-                    .unwrap_or(&track.title);
-                if let Ok(normalized) = normalize_filename(&config, raw_name).await {
-                    let _ = state.db.apply_llm_enrichment(
-                        &id,
-                        &normalized.title,
-                        &normalized.artist,
-                        &normalized.album,
-                        normalized.release_year,
-                        normalized.genre.as_deref(),
-                        &normalized.moods,
-                        normalized.energy_score,
-                        &normalized.situational_tags,
-                    );
-                    count += 1;
-                }
+    for (i, id) in ids.iter().enumerate() {
+        let current = i as u32 + 1;
+        if let Ok(Some(track)) = state.db.get_track_by_id(id) {
+            let _ = app.emit(
+                "enrich-progress",
+                EnrichProgressEvent {
+                    current,
+                    total,
+                    message: format!("Enriching {} — {}", track.artist, track.title),
+                },
+            );
+            let raw_name = std::path::Path::new(&track.file_path)
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or(&track.title);
+            if let Ok(normalized) = normalize_filename(&config, raw_name).await {
+                let _ = state.db.apply_llm_enrichment(
+                    id,
+                    &normalized.title,
+                    &normalized.artist,
+                    &normalized.album,
+                    normalized.release_year,
+                    normalized.genre.as_deref(),
+                    &normalized.moods,
+                    normalized.energy_score,
+                    &normalized.situational_tags,
+                );
+                count += 1;
             }
         }
     }
@@ -163,14 +181,11 @@ pub async fn build_playlist_queue(
 #[tauri::command]
 pub async fn ingest_youtube(
     url: String,
+    playlist_name: Option<String>,
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
-    if !ytdlp::yt_dlp_available() {
-        return Err(
-            "yt-dlp not found. Install from https://github.com/yt-dlp/yt-dlp#installation".into(),
-        );
-    }
+    ytdlp::ensure_yt_dlp(&state.data_dir).await?;
     let job_id = ingest::create_job(&state.db, &url)?;
     let db = state.db.clone();
     let data_dir = state.data_dir.clone();
@@ -179,7 +194,15 @@ pub async fn ingest_youtube(
         let _ = app.emit("ingest-progress", &ev);
     });
     tauri::async_runtime::spawn(async move {
-        ingest::run_youtube_ingest(db, data_dir, job_id_spawn, url, Some(on_progress)).await;
+        ingest::run_youtube_ingest(
+            db,
+            data_dir,
+            job_id_spawn,
+            url,
+            playlist_name,
+            Some(on_progress),
+        )
+        .await;
     });
     Ok(job_id)
 }
@@ -190,8 +213,35 @@ pub async fn get_ingest_jobs(state: State<'_, AppState>) -> Result<Vec<IngestJob
 }
 
 #[tauri::command]
-pub fn check_ytdlp_available() -> bool {
-    ytdlp::yt_dlp_available()
+pub fn check_ytdlp_available(state: State<'_, AppState>) -> bool {
+    ytdlp::yt_dlp_available(&state.data_dir)
+}
+
+#[tauri::command]
+pub async fn ensure_ytdlp(state: State<'_, AppState>) -> Result<(), String> {
+    ytdlp::ensure_yt_dlp(&state.data_dir).await?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn read_audio_bytes(path: String) -> Result<Vec<u8>, String> {
+    tokio::fs::read(&path).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_use_llm_rerank(state: State<'_, AppState>) -> Result<bool, String> {
+    Ok(state
+        .db
+        .get_setting("use_llm_rerank")?
+        .map(|v| v == "true")
+        .unwrap_or(false))
+}
+
+#[tauri::command]
+pub fn set_use_llm_rerank(enabled: bool, state: State<'_, AppState>) -> Result<(), String> {
+    state
+        .db
+        .set_setting("use_llm_rerank", if enabled { "true" } else { "false" })
 }
 
 #[tauri::command]

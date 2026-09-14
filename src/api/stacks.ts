@@ -129,15 +129,21 @@ export async function listLlmProviders(): Promise<LlmProviderInfo[]> {
   return invokeTauri<LlmProviderInfo[]>("list_llm_providers");
 }
 
-export async function ingestYoutube(url: string): Promise<string> {
+export async function ingestYoutube(
+  url: string,
+  playlistName?: string,
+): Promise<string> {
   if (isWebMode()) {
     const data = await api<{ job_id: string }>("/api/ingest", {
       method: "POST",
-      body: JSON.stringify({ url }),
+      body: JSON.stringify({ url, playlist_name: playlistName }),
     });
     return data.job_id;
   }
-  return invokeTauri<string>("ingest_youtube", { url });
+  return invokeTauri<string>("ingest_youtube", {
+    url,
+    playlistName: playlistName ?? null,
+  });
 }
 
 export async function getIngestJobs(): Promise<IngestJob[]> {
@@ -151,6 +157,33 @@ export async function checkYtdlpAvailable(): Promise<boolean> {
     return data.available;
   }
   return invokeTauri<boolean>("check_ytdlp_available");
+}
+
+export async function ensureYtdlp(): Promise<void> {
+  if (isWebMode()) return;
+  await invokeTauri("ensure_ytdlp");
+}
+
+export async function readAudioBytes(filePath: string): Promise<Uint8Array> {
+  if (isWebMode()) {
+    const res = await fetch(
+      `/api/media?path=${encodeURIComponent(filePath)}`,
+    );
+    if (!res.ok) throw new Error(`Failed to read audio (${res.status})`);
+    return new Uint8Array(await res.arrayBuffer());
+  }
+  const bytes = await invokeTauri<number[]>("read_audio_bytes", { path: filePath });
+  return Uint8Array.from(bytes);
+}
+
+export async function getUseLlmRerank(): Promise<boolean> {
+  if (isWebMode()) return false;
+  return invokeTauri<boolean>("get_use_llm_rerank");
+}
+
+export async function setUseLlmRerank(enabled: boolean): Promise<void> {
+  if (isWebMode()) return;
+  await invokeTauri("set_use_llm_rerank", { enabled });
 }
 
 export async function savePlaylist(

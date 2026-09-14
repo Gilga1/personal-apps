@@ -2,33 +2,64 @@ import { AnimatePresence, motion } from "framer-motion";
 import { useEffect, useState } from "react";
 import {
   getLlmConfig,
+  getUseLlmRerank,
   listLlmProviders,
   normalizeLowConfidence,
   setLlmConfig,
+  setUseLlmRerank,
   testLlmConnection,
 } from "../../api/stacks";
 import { useSettingsStore } from "../../state/settingsStore";
-import type { LlmConfig, LlmProvider } from "../../types";
+import { useToastStore } from "../../state/toastStore";
+import type { EnrichProgressEvent, LlmConfig, LlmProvider } from "../../types";
 
 export function SettingsModal() {
-  const { settingsOpen, setSettingsOpen, providers, setProviders, setLlmConfig: storeLlmConfig } =
-    useSettingsStore();
+  const {
+    settingsOpen,
+    setSettingsOpen,
+    providers,
+    setProviders,
+    setLlmConfig: storeLlmConfig,
+    useLlmRerank,
+    setUseLlmRerank: storeSetUseLlmRerank,
+  } = useSettingsStore();
+  const { push, update, dismiss } = useToastStore();
   const [config, setConfig] = useState<LlmConfig | null>(null);
   const [status, setStatus] = useState<string>("");
-  const [useLlmRerank, setUseLlmRerank] = useState(true);
 
   useEffect(() => {
     if (!settingsOpen) return;
     (async () => {
-      const [cfg, prov] = await Promise.all([
+      const [cfg, prov, rerank] = await Promise.all([
         getLlmConfig(),
         listLlmProviders(),
+        getUseLlmRerank(),
       ]);
       setConfig(cfg);
       storeLlmConfig(cfg);
       setProviders(prov);
+      storeSetUseLlmRerank(rerank);
     })();
-  }, [settingsOpen, storeLlmConfig, setProviders]);
+  }, [settingsOpen, storeLlmConfig, setProviders, storeSetUseLlmRerank]);
+
+  useEffect(() => {
+    if (!settingsOpen) return;
+    let unlisten: (() => void) | undefined;
+    let toastId: string | null = null;
+    (async () => {
+      const { listen } = await import("@tauri-apps/api/event");
+      unlisten = await listen<EnrichProgressEvent>("enrich-progress", (ev) => {
+        const p = ev.payload;
+        const pct = p.total ? (p.current / p.total) * 100 : 0;
+        if (!toastId) {
+          toastId = push("Enriching low-confidence tracks…", "progress", pct);
+        } else {
+          update(toastId, p.message, "progress", pct);
+        }
+      });
+    })();
+    return () => unlisten?.();
+  }, [settingsOpen, push, update]);
 
   const currentProvider = config
     ? providers.find((p) => p.id === config.provider)
@@ -54,12 +85,19 @@ export function SettingsModal() {
   };
 
   const enrich = async () => {
+    const toastId = push("Enriching low-confidence tracks…", "progress", 0);
     setStatus("Enriching low-confidence tracks…");
     try {
       const count = await normalizeLowConfidence();
-      setStatus(`Enriched ${count} track(s).`);
+      const msg = `Enriched ${count} track(s).`;
+      setStatus(msg);
+      update(toastId, msg, "success", 100);
+      setTimeout(() => dismiss(toastId), 4000);
     } catch (e) {
-      setStatus(String(e));
+      const msg = String(e);
+      setStatus(msg);
+      update(toastId, msg, "error");
+      setTimeout(() => dismiss(toastId), 5000);
     }
   };
 
@@ -165,7 +203,11 @@ export function SettingsModal() {
           <input
             type="checkbox"
             checked={useLlmRerank}
-            onChange={(e) => setUseLlmRerank(e.target.checked)}
+            onChange={async (e) => {
+              const enabled = e.target.checked;
+              storeSetUseLlmRerank(enabled);
+              await setUseLlmRerank(enabled);
+            }}
           />
           Use LLM for playlist re-ranking
         </label>

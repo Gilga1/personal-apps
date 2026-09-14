@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   buildPlaylistQueue,
   getTracks,
+  getUseLlmRerank,
   pickLibraryFolder,
   scanLibrary,
   setTrackMood,
@@ -14,9 +15,11 @@ import { Library } from "./components/Library/Library";
 import { NowPlaying } from "./components/NowPlaying/NowPlaying";
 import { PlaylistsPanel } from "./components/Playlists/PlaylistsPanel";
 import { SettingsModal } from "./components/Settings/SettingsModal";
+import { ToastStack } from "./components/Toast/ToastStack";
 import { useLibraryStore } from "./state/libraryStore";
 import { getCurrentTrack, usePlayerStore } from "./state/playerStore";
 import { useSettingsStore } from "./state/settingsStore";
+import { useToastStore } from "./state/toastStore";
 import { isFullscreen, toggleFullscreen } from "./utils/fullscreen";
 import "./styles/stacks.css";
 
@@ -48,7 +51,8 @@ function App() {
     setVolume,
   } = usePlayerStore();
 
-  const { setSettingsOpen, llmConfig } = useSettingsStore();
+  const { setSettingsOpen, useLlmRerank } = useSettingsStore();
+  const { push, update, dismiss } = useToastStore();
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [queuePrompt, setQueuePrompt] = useState<string | null>(null);
@@ -66,6 +70,10 @@ function App() {
   useEffect(() => {
     refreshTracks();
   }, [refreshTracks]);
+
+  useEffect(() => {
+    getUseLlmRerank().then(useSettingsStore.getState().setUseLlmRerank);
+  }, []);
 
   useEffect(() => {
     audioEngine.setCrossfadeEnabled(crossfadeOn);
@@ -217,15 +225,41 @@ function App() {
     if (track) updateTrack({ ...track, mood, mood_source: "manual_override" });
   };
 
+  const resetQueue = useCallback(() => {
+    setQueueOverride(null);
+    setQueuePrompt(null);
+    setMoodFilter(null);
+    setSearchText("");
+  }, [setQueueOverride, setMoodFilter, setSearchText]);
+
   const handleBuildQueue = async (prompt: string, useLlm: boolean) => {
-    const ids = await buildPlaylistQueue(prompt, useLlm);
-    if (!ids.length) {
-      alert("No matches — try simpler terms or check your library.");
-      return;
+    const toastId = push(`Building queue for "${prompt}"…`, "progress", 0);
+    try {
+      const ids = await buildPlaylistQueue(prompt, useLlm);
+      if (!ids.length) {
+        update(
+          toastId,
+          "No matches — try words like workout, focus, or an artist name.",
+          "error",
+        );
+        setTimeout(() => dismiss(toastId), 5000);
+        return;
+      }
+      setQueuePrompt(prompt);
+      setQueueOverride(ids);
+      update(
+        toastId,
+        `Queue ready — ${ids.length} track${ids.length === 1 ? "" : "s"} matched.`,
+        "success",
+        100,
+      );
+      setTimeout(() => dismiss(toastId), 4000);
+      await playTrack(ids[0]);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      update(toastId, `Queue build failed: ${message}`, "error");
+      setTimeout(() => dismiss(toastId), 5000);
     }
-    setQueuePrompt(prompt);
-    setQueueOverride(ids);
-    await playTrack(ids[0]);
   };
 
   const handleLoadPlaylist = async (ids: string[]) => {
@@ -296,9 +330,17 @@ function App() {
       >
         <CommandBar
           onBuildQueue={handleBuildQueue}
-          llmEnabled={!!llmConfig}
+          useLlmRerank={useLlmRerank}
+          queueActive={!!queueOverride}
+          onResetQueue={resetQueue}
         />
-        <IngestPanel onIngestComplete={refreshTracks} />
+        <IngestPanel
+          onIngestComplete={refreshTracks}
+          onPlaylistImported={(ids) => {
+            setQueueOverride(ids);
+            setQueuePrompt("YouTube import");
+          }}
+        />
         <PlaylistsPanel
           currentQueue={currentQueue}
           queuePrompt={queuePrompt}
@@ -315,12 +357,13 @@ function App() {
         tracks={filteredTracks}
         currentTrackId={currentTrackId}
         searchText={searchText}
+        queuePrompt={queuePrompt}
+        queueActive={!!queueOverride}
         onSearch={setSearchText}
         onPickFolder={pickFolder}
         onOpenSettings={() => setSettingsOpen(true)}
+        onResetQueue={resetQueue}
         onPlay={(id) => {
-          setQueueOverride(null);
-          setQueuePrompt(null);
           playTrack(id);
         }}
         onMoodClick={handleMoodClick}
@@ -328,6 +371,7 @@ function App() {
       </motion.div>
 
       <SettingsModal />
+      <ToastStack />
     </div>
   );
 }

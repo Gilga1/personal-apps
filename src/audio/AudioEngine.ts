@@ -1,63 +1,42 @@
-import { mediaUrl } from "../api/stacks";
+import { isWebMode, mediaUrl, readAudioBytes } from "../api/stacks";
 
-const CROSSFADE_MS = 300;
 const DECODE_FORMATS = new Set(["flac", "ogg", "opus"]);
 
 type ProgressCallback = (currentTime: number, duration: number) => void;
 
+/** Reliable playback: plain <audio> for MP3/M4A; decoded buffers for FLAC (WebView2 can't play FLAC natively). */
 class AudioEngine {
-  private audioA: HTMLAudioElement;
-  private audioB: HTMLAudioElement;
-  private activeIsA = true;
+  private audio: HTMLAudioElement;
   private audioCtx: AudioContext | null = null;
-  private analyser: AnalyserNode | null = null;
-  private masterGain: GainNode | null = null;
-  private gainA: GainNode | null = null;
-  private gainB: GainNode | null = null;
-  private sourceA: MediaElementAudioSourceNode | null = null;
-  private sourceB: MediaElementAudioSourceNode | null = null;
+  private gainNode: GainNode | null = null;
   private bufferSource: AudioBufferSourceNode | null = null;
-  private bufferGain: GainNode | null = null;
   private bufferDuration = 0;
   private bufferStartedAt = 0;
   private bufferOffset = 0;
   private lastFilePath: string | null = null;
-  private dataArray: Uint8Array<ArrayBuffer> | null = null;
-  private rafId: number | null = null;
   private playing = false;
-  private crossfadeEnabled = true;
   private masterVolume = 0.8;
-  private crossfadeToken = 0;
   private mode: "element" | "buffer" = "element";
   private progressListeners = new Set<ProgressCallback>();
   private onEndedCallback: (() => void) | null = null;
+  private rafId: number | null = null;
 
   constructor() {
-    this.audioA = this.createAudioElement("stacks-audio-a");
-    this.audioB = this.createAudioElement("stacks-b-audio-b");
-    this.audioA.addEventListener("ended", () => this.handleElementEnded());
-    this.audioB.addEventListener("ended", () => this.handleElementEnded());
-    this.startGlowLoop();
+    this.audio = document.createElement("audio");
+    this.audio.id = "stacks-audio";
+    this.audio.preload = "auto";
+    this.audio.style.display = "none";
+    document.body.appendChild(this.audio);
+    this.audio.addEventListener("ended", () => {
+      if (this.mode === "element" && this.playing) {
+        this.onEndedCallback?.();
+      }
+    });
     this.startProgressLoop();
   }
 
-  private createAudioElement(id: string) {
-    const el = new Audio();
-    el.id = id;
-    el.preload = "auto";
-    el.style.display = "none";
-    document.body.appendChild(el);
-    return el;
-  }
-
-  private handleElementEnded() {
-    if (this.mode === "element" && this.playing) {
-      this.onEndedCallback?.();
-    }
-  }
-
   get element() {
-    return this.activeIsA ? this.audioA : this.audioB;
+    return this.audio;
   }
 
   onProgress(callback: ProgressCallback) {
@@ -73,102 +52,79 @@ class AudioEngine {
     this.playing = playing;
   }
 
-  setCrossfadeEnabled(enabled: boolean) {
-    this.crossfadeEnabled = enabled;
+  setCrossfadeEnabled(_enabled: boolean) {
+    // Crossfade disabled in simplified engine for reliable Windows playback.
   }
 
   async loadAndPlay(filePath: string) {
     this.lastFilePath = filePath;
+    await this.unlockAudio();
     const ext = filePath.split(".").pop()?.toLowerCase() ?? "";
-    if (DECODE_FORMATS.has(ext)) {
+
+    if (DECODE_FORMATS.has(ext) || isWebMode()) {
       await this.playDecoded(filePath, 0);
       return;
     }
-    await this.playViaElement(filePath);
+
+    try {
+      await this.playElement(filePath);
+    } catch {
+      await this.playDecoded(filePath, 0);
+    }
   }
 
-  private async playViaElement(filePath: string) {
+  private async playElement(filePath: string) {
     this.stopBuffer();
     this.mode = "element";
-    this.ensureGraph();
-    await this.resumeContext();
-
-    const incoming = this.activeIsA ? this.audioB : this.audioA;
-    const outgoing = this.activeIsA ? this.audioA : this.audioB;
-    const incomingGain = this.activeIsA ? this.gainB! : this.gainA!;
-    const outgoingGain = this.activeIsA ? this.gainA! : this.gainB!;
-    const isFirstTrack = !outgoing.src && !incoming.src;
-
-    incoming.src = await mediaUrl(filePath);
-    await incoming.load();
-
-    if (isFirstTrack || !this.crossfadeEnabled || outgoing.paused) {
-      outgoing.pause();
-      outgoingGain.gain.value = 0;
-      incomingGain.gain.value = 1;
-      await incoming.play();
-      this.activeIsA = !this.activeIsA;
-      this.playing = true;
-      return;
+    const url = await mediaUrl(filePath);
+    this.audio.src = url;
+    this.audio.volume = this.masterVolume;
+    await this.audio.load();
+    await this.audio.play();
+    if (this.audio.paused) {
+      throw new Error("HTML audio playback failed");
     }
-
-    const token = ++this.crossfadeToken;
-    incomingGain.gain.value = 0;
-    await incoming.play();
-
-    const start = performance.now();
-    const outStartVol = outgoingGain.gain.value;
-
-    const fade = () => {
-      if (token !== this.crossfadeToken) return;
-      const t = Math.min(1, (performance.now() - start) / CROSSFADE_MS);
-      outgoingGain.gain.value = outStartVol * (1 - t);
-      incomingGain.gain.value = t;
-      if (t < 1) {
-        requestAnimationFrame(fade);
-      } else {
-        outgoing.pause();
-        outgoingGain.gain.value = 0;
-        incomingGain.gain.value = 1;
-        this.activeIsA = !this.activeIsA;
-      }
-    };
-    requestAnimationFrame(fade);
     this.playing = true;
   }
 
   private async playDecoded(filePath: string, seekTo: number) {
     this.mode = "buffer";
-    this.ensureGraph();
-    await this.resumeContext();
+    this.audio.pause();
     this.stopBuffer();
-    this.audioA.pause();
-    this.audioB.pause();
-    if (this.gainA) this.gainA.gain.value = 0;
-    if (this.gainB) this.gainB.gain.value = 0;
+    const ctx = this.getCtx();
 
-    const url = await mediaUrl(filePath);
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error(`Could not load audio file (${response.status})`);
+    let arrayBuffer: ArrayBuffer;
+    if (isWebMode()) {
+      const url = await mediaUrl(filePath);
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`Could not load audio (${response.status})`);
+      }
+      arrayBuffer = await response.arrayBuffer();
+    } else {
+      const bytes = await readAudioBytes(filePath);
+      arrayBuffer = bytes.buffer.slice(
+        bytes.byteOffset,
+        bytes.byteOffset + bytes.byteLength,
+      ) as ArrayBuffer;
     }
 
-    const arrayBuffer = await response.arrayBuffer();
-    const audioBuffer = await this.audioCtx!.decodeAudioData(arrayBuffer);
+    const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
     this.bufferDuration = audioBuffer.duration;
     this.bufferOffset = Math.min(Math.max(0, seekTo), audioBuffer.duration);
 
-    this.bufferSource = this.audioCtx!.createBufferSource();
-    this.bufferGain = this.audioCtx!.createGain();
+    this.gainNode = ctx.createGain();
+    this.gainNode.gain.value = this.masterVolume;
+    this.gainNode.connect(ctx.destination);
+
+    this.bufferSource = ctx.createBufferSource();
     this.bufferSource.buffer = audioBuffer;
-    this.bufferSource.connect(this.bufferGain);
-    this.bufferGain.connect(this.analyser!);
-    this.bufferGain.gain.value = 1;
+    this.bufferSource.connect(this.gainNode);
     this.bufferSource.onended = () => {
       if (this.playing) this.onEndedCallback?.();
     };
     this.bufferSource.start(0, this.bufferOffset);
-    this.bufferStartedAt = this.audioCtx!.currentTime - this.bufferOffset;
+    this.bufferStartedAt = ctx.currentTime - this.bufferOffset;
     this.playing = true;
   }
 
@@ -182,9 +138,9 @@ class AudioEngine {
       this.bufferSource.disconnect();
       this.bufferSource = null;
     }
-    if (this.bufferGain) {
-      this.bufferGain.disconnect();
-      this.bufferGain = null;
+    if (this.gainNode) {
+      this.gainNode.disconnect();
+      this.gainNode = null;
     }
   }
 
@@ -193,30 +149,26 @@ class AudioEngine {
       await this.playDecoded(this.lastFilePath, this.bufferOffset);
       return;
     }
-    this.ensureGraph();
-    await this.resumeContext();
-    const gain = this.activeIsA ? this.gainA! : this.gainB!;
-    gain.gain.value = 1;
-    await this.element.play();
+    this.audio.volume = this.masterVolume;
+    await this.audio.play();
     this.playing = true;
   }
 
   pause() {
-    this.crossfadeToken++;
     if (this.mode === "buffer") {
       this.bufferOffset = this.getBufferTime();
       this.stopBuffer();
     } else {
-      this.audioA.pause();
-      this.audioB.pause();
+      this.audio.pause();
     }
     this.playing = false;
   }
 
   setVolume(volume: number) {
     this.masterVolume = volume;
-    if (this.masterGain) {
-      this.masterGain.gain.value = volume;
+    this.audio.volume = volume;
+    if (this.gainNode) {
+      this.gainNode.gain.value = volume;
     }
   }
 
@@ -228,10 +180,23 @@ class AudioEngine {
       }
       return;
     }
-    const el = this.element;
-    if (el.duration) {
-      el.currentTime = ratio * el.duration;
+    if (this.audio.duration) {
+      this.audio.currentTime = ratio * this.audio.duration;
     }
+  }
+
+  private async unlockAudio() {
+    const ctx = this.getCtx();
+    if (ctx.state === "suspended") {
+      await ctx.resume();
+    }
+  }
+
+  private getCtx() {
+    if (!this.audioCtx) {
+      this.audioCtx = new AudioContext();
+    }
+    return this.audioCtx;
   }
 
   private getBufferTime() {
@@ -245,43 +210,12 @@ class AudioEngine {
 
   private getCurrentTime() {
     if (this.mode === "buffer") return this.getBufferTime();
-    return this.element.currentTime || 0;
+    return this.audio.currentTime || 0;
   }
 
   private getDuration() {
     if (this.mode === "buffer") return this.bufferDuration;
-    return this.element.duration || 0;
-  }
-
-  private async resumeContext() {
-    if (this.audioCtx?.state === "suspended") {
-      await this.audioCtx.resume();
-    }
-  }
-
-  private ensureGraph() {
-    if (this.audioCtx) return;
-    this.audioCtx = new AudioContext();
-    this.masterGain = this.audioCtx.createGain();
-    this.gainA = this.audioCtx.createGain();
-    this.gainB = this.audioCtx.createGain();
-    this.analyser = this.audioCtx.createAnalyser();
-    this.analyser.fftSize = 256;
-
-    this.sourceA = this.audioCtx.createMediaElementSource(this.audioA);
-    this.sourceB = this.audioCtx.createMediaElementSource(this.audioB);
-
-    this.sourceA.connect(this.gainA);
-    this.sourceB.connect(this.gainB);
-    this.gainA.connect(this.analyser);
-    this.gainB.connect(this.analyser);
-    this.analyser.connect(this.masterGain);
-    this.masterGain.connect(this.audioCtx.destination);
-
-    this.masterGain.gain.value = this.masterVolume;
-    this.gainA.gain.value = 0;
-    this.gainB.gain.value = 0;
-    this.dataArray = new Uint8Array(this.analyser.frequencyBinCount);
+    return this.audio.duration || 0;
   }
 
   private startProgressLoop() {
@@ -296,42 +230,12 @@ class AudioEngine {
     tick();
   }
 
-  private avg(arr: Uint8Array<ArrayBuffer>, from: number, to: number) {
-    let sum = 0;
-    for (let i = from; i < to; i++) sum += arr[i];
-    return sum / (to - from);
-  }
-
-  private startGlowLoop() {
-    const tick = () => {
-      const root = document.documentElement.style;
-      if (this.analyser && this.dataArray) {
-        this.analyser.getByteFrequencyData(this.dataArray);
-        const bass = this.avg(this.dataArray, 0, 8) / 255;
-        const treble = this.avg(this.dataArray, 40, 90) / 255;
-        const idle =
-          0.15 +
-          Math.sin(Date.now() / 1400) * 0.03 +
-          (Math.random() - 0.5) * 0.015;
-        root.setProperty(
-          "--glow-opacity",
-          (this.playing ? 0.22 + bass * 0.45 : idle).toFixed(3),
-        );
-        root.setProperty("--glow-scale", (1 + bass * 0.3).toFixed(3));
-        root.setProperty("--glow-hue", `${(treble * 40 - 10).toFixed(1)}deg`);
-      }
-      requestAnimationFrame(tick);
-    };
-    tick();
-  }
-
   destroy() {
     if (this.rafId) cancelAnimationFrame(this.rafId);
     this.stopBuffer();
-    this.audioA.pause();
-    this.audioB.pause();
-    this.audioA.remove();
-    this.audioB.remove();
+    this.audio.pause();
+    this.audio.remove();
+    this.audioCtx?.close();
   }
 }
 

@@ -46,6 +46,14 @@ export interface IngestProgressEvent {
   progress: number;
   message: string;
   track_id?: string | null;
+  track_ids?: string[];
+  playlist_id?: string | null;
+}
+
+export interface EnrichProgressEvent {
+  current: number;
+  total: number;
+  message: string;
 }
 
 export interface PlaylistSummary {
