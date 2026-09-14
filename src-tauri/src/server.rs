@@ -57,6 +57,7 @@ pub async fn run_server() {
         db: Arc::new(db),
         data_dir,
         music_dir: music_dir.clone(),
+        ingest_registry: Arc::new(ingest::IngestJobRegistry::default()),
     };
 
     if let Ok(tracks) = state.db.get_all_tracks() {
@@ -111,6 +112,7 @@ struct AppState {
     db: Arc<Database>,
     data_dir: PathBuf,
     music_dir: PathBuf,
+    ingest_registry: Arc<ingest::IngestJobRegistry>,
 }
 
 #[cfg(feature = "server")]
@@ -330,10 +332,11 @@ async fn ingest_youtube(
     let job_id = ingest::create_job(&state.db, &body.url)?;
     let db = state.db.clone();
     let data_dir = state.data_dir.clone();
+    let registry = state.ingest_registry.clone();
     let job_id_spawn = job_id.clone();
     let url = body.url;
     tokio::spawn(async move {
-        ingest::run_youtube_ingest(db, data_dir, job_id_spawn, url, None, None).await;
+        ingest::run_youtube_ingest(db, data_dir, registry, job_id_spawn, url, None, None).await;
     });
     Ok(Json(serde_json::json!({ "job_id": job_id })))
 }

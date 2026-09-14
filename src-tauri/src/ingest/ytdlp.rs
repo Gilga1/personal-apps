@@ -1,3 +1,4 @@
+use super::registry::IngestJobRegistry;
 use super::url_plan::plan_download;
 use regex::Regex;
 use std::path::{Path, PathBuf};
@@ -163,6 +164,8 @@ pub async fn download_audio(
     data_dir: &Path,
     url: &str,
     output_dir: &Path,
+    job_id: &str,
+    registry: &IngestJobRegistry,
     on_progress: impl Fn(f32, &str) + Send + Sync,
 ) -> Result<Vec<PathBuf>, String> {
     let plan = plan_download(url);
@@ -208,6 +211,8 @@ pub async fn download_audio(
     cmd.stderr(std::process::Stdio::piped());
     hide_window_async(&mut cmd);
 
+    registry.begin(job_id);
+
     let mut child = cmd
         .spawn()
         .map_err(|e| format!("Failed to spawn yt-dlp: {e}"))?;
@@ -220,10 +225,14 @@ pub async fn download_audio(
 
     let stderr = child.stderr.take().ok_or("No stderr from yt-dlp")?;
     let stdout = child.stdout.take();
+    registry.store_child(job_id, child);
 
     let read_stderr = async {
         let mut reader = BufReader::new(stderr).lines();
         while let Ok(Some(line)) = reader.next_line().await {
+            if registry.is_cancelled(job_id) {
+                break;
+            }
             if let Some((pct, msg)) = update_progress(&progress_state, &line) {
                 on_progress(pct, &msg);
             }
@@ -234,6 +243,9 @@ pub async fn download_audio(
         if let Some(stdout) = stdout {
             let mut reader = BufReader::new(stdout).lines();
             while let Ok(Some(line)) = reader.next_line().await {
+                if registry.is_cancelled(job_id) {
+                    break;
+                }
                 if let Some((pct, msg)) = update_progress(&progress_state, &line) {
                     on_progress(pct, &msg);
                 }
@@ -243,7 +255,14 @@ pub async fn download_audio(
 
     tokio::join!(read_stderr, read_stdout);
 
-    let status = child.wait().await.map_err(|e| e.to_string())?;
+    if registry.is_cancelled(job_id) {
+        registry.finish(job_id);
+        return Err("Import cancelled".into());
+    }
+
+    let status = registry.wait_child(job_id).await?;
+    registry.finish(job_id);
+
     if !status.success() {
         let files = collect_audio_files(output_dir);
         if files.is_empty() {

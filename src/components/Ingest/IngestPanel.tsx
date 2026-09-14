@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import {
+  cancelIngest,
   checkYtdlpAvailable,
   ensureYtdlp,
   getIngestJobs,
@@ -105,9 +106,13 @@ export function IngestPanel({
             refresh();
             onCompleteRef.current();
           }
-          if (p.status === "failed") {
+          if (p.status === "failed" || p.status === "cancelled") {
             if (toastId) {
-              update(toastId, p.message, "error");
+              update(
+                toastId,
+                p.message,
+                p.status === "cancelled" ? "success" : "error",
+              );
               setTimeout(() => toastId && dismiss(toastId), 5000);
               toastId = null;
             }
@@ -212,6 +217,13 @@ export function IngestPanel({
                     style={{ width: `${Math.min(100, Math.max(0, progress))}%` }}
                   />
                 </div>
+                <button
+                  type="button"
+                  className="file-btn ingest-cancel-btn"
+                  onClick={() => cancelIngest(job.id)}
+                >
+                  Cancel
+                </button>
               </div>
             );
           })}

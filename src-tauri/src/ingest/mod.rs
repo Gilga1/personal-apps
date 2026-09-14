@@ -1,5 +1,8 @@
+pub mod registry;
 pub mod url_plan;
 pub mod ytdlp;
+
+pub use registry::IngestJobRegistry;
 
 use crate::library::db::Database;
 use crate::library::ingest_file::ingest_file;
@@ -24,6 +27,7 @@ pub type ProgressCallback = Arc<dyn Fn(IngestProgressEvent) + Send + Sync>;
 pub async fn run_youtube_ingest(
     db: Arc<Database>,
     data_dir: PathBuf,
+    registry: Arc<IngestJobRegistry>,
     job_id: String,
     url: String,
     playlist_name: Option<String>,
@@ -58,14 +62,22 @@ pub async fn run_youtube_ingest(
 
     let output_dir = ytdlp::ingest_dir(&data_dir).join(&job_id);
 
-    let download_result = ytdlp::download_audio(&data_dir, &url, &output_dir, |pct, msg| {
-        emit("downloading", pct, msg, None, &[], None);
-    });
+    let download_result = ytdlp::download_audio(
+        &data_dir,
+        &url,
+        &output_dir,
+        &job_id,
+        &registry,
+        |pct, msg| {
+            emit("downloading", pct, msg, None, &[], None);
+        },
+    );
 
     match download_result.await {
         Err(e) => {
-            let _ = db.update_ingest_job(&job_id, "failed", None, Some(&e), Some(0.0));
-            emit("failed", 0.0, &e, None, &[], None);
+            let status = if e == "Import cancelled" { "cancelled" } else { "failed" };
+            let _ = db.update_ingest_job(&job_id, status, None, Some(&e), Some(0.0));
+            emit(status, 0.0, &e, None, &[], None);
         }
         Ok(files) => {
             emit("normalizing", 100.0, "Adding to library…", None, &[], None);
