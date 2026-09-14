@@ -52,8 +52,12 @@ function App() {
   const [queuePrompt, setQueuePrompt] = useState<string | null>(null);
 
   const refreshTracks = useCallback(async () => {
-    const data = await getTracks();
-    setTracks(data);
+    try {
+      const data = await getTracks();
+      setTracks(data);
+    } catch (err) {
+      console.error("Failed to load tracks:", err);
+    }
   }, [setTracks]);
 
   useEffect(() => {
@@ -174,8 +178,16 @@ function App() {
     if (!folder) return;
     setLoading(true);
     try {
-      await scanLibrary(folder);
+      const added = await scanLibrary(folder);
       await refreshTracks();
+      if (added === 0) {
+        alert(
+          "No FLAC or MP3 files found in that folder. Try a folder that contains audio files.",
+        );
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      alert(`Library scan failed: ${message}`);
     } finally {
       setLoading(false);
     }
