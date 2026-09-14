@@ -1,6 +1,7 @@
 use chrono::Utc;
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Mutex;
 use uuid::Uuid;
@@ -218,6 +219,20 @@ impl Database {
             })
             .map_err(|e| e.to_string())?;
 
+        let mut tags_by_track: HashMap<String, Vec<String>> = HashMap::new();
+        let mut tags_stmt = conn
+            .prepare("SELECT track_id, tag FROM situational_tags")
+            .map_err(|e| e.to_string())?;
+        let tag_rows = tags_stmt
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })
+            .map_err(|e| e.to_string())?;
+        for row in tag_rows {
+            let (track_id, tag) = row.map_err(|e| e.to_string())?;
+            tags_by_track.entry(track_id).or_default().push(tag);
+        }
+
         let mut tracks = Vec::new();
         for row in rows {
             let (
@@ -237,7 +252,7 @@ impl Database {
                 energy_score,
             ) = row.map_err(|e| e.to_string())?;
 
-            let tags = self.get_situational_tags_for(&id)?;
+            let situational_tags = tags_by_track.remove(&id).unwrap_or_default();
 
             tracks.push(Track {
                 id,
@@ -254,23 +269,10 @@ impl Database {
                 mood,
                 mood_source,
                 energy_score,
-                situational_tags: tags,
+                situational_tags,
             });
         }
         Ok(tracks)
-    }
-
-    fn get_situational_tags_for(&self, track_id: &str) -> Result<Vec<String>, String> {
-        let conn = self.conn.lock().map_err(|e| e.to_string())?;
-        let mut stmt = conn
-            .prepare("SELECT tag FROM situational_tags WHERE track_id = ?1")
-            .map_err(|e| e.to_string())?;
-        let tags = stmt
-            .query_map(params![track_id], |row| row.get(0))
-            .map_err(|e| e.to_string())?
-            .filter_map(|r| r.ok())
-            .collect();
-        Ok(tags)
     }
 
     pub fn set_track_mood(&self, track_id: &str, mood: &str) -> Result<(), String> {
