@@ -3,26 +3,16 @@
 .env.local
 **/.env
 
-# Python
-app/nutrition-app/backend/.venv/
-app/nutrition-app/backend/venv/
-**/__pycache__/
-*.py[cod]
-*.egg-info/
-.pytest_cache/
-.mypy_cache/
-
 # Node
-app/nutrition-app/frontend/node_modules/
-app/nutrition-app/frontend/dist/
-app/nutrition-app/frontend/.vite/
-app/stress-buster/frontend/node_modules/
-app/stress-buster/frontend/dist/
-app/stress-buster/frontend/.vite/
-app/music-app/node_modules/
-app/music-app/dist/
-app/music-app/.vite/
-app/music-app/src-tauri/target/
+node_modules/
+dist/
+.vite/
+
+# Local Docker music mount (optional)
+music/
+
+# Rust / Tauri
+src-tauri/target/
 
 # OS / IDE
 .DS_Store

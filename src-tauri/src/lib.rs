@@ -1,24 +1,31 @@
-mod commands;
 mod ingest;
 mod library;
 mod llm;
 mod playlist;
 
+#[cfg(feature = "desktop")]
+mod commands;
+
+#[cfg(feature = "server")]
+pub mod server;
+
+#[cfg(feature = "desktop")]
 use commands::AppState;
+#[cfg(feature = "desktop")]
 use library::db::Database;
+#[cfg(feature = "desktop")]
 use std::sync::Arc;
+#[cfg(feature = "desktop")]
 use tauri::Manager;
 
+#[cfg(feature = "desktop")]
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
-            let data_dir = app
-                .path()
-                .app_data_dir()
-                .map_err(|e| e.to_string())?;
+            let data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
             let db = Database::open(data_dir.clone())?;
             app.manage(AppState {
                 db: Arc::new(db),

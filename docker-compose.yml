@@ -1,0 +1,27 @@
+services:
+  stacks:
+    build: .
+    ports:
+      - "8080:8080"
+    volumes:
+      # Mount your music library (read-only)
+      - ${MUSIC_DIR:-./music}:/music:ro
+      # Persist SQLite DB and YouTube downloads
+      - ${STACKS_DATA:-stacks-data}:/data
+    environment:
+      STACKS_PORT: "8080"
+      STACKS_MUSIC_DIR: /music
+      STACKS_DATA: /data
+      STACKS_STATIC: /app/static
+      # Optional LLM — uncomment / set as needed
+      STACKS_LLM_PROVIDER: ${STACKS_LLM_PROVIDER:-ollama}
+      STACKS_LLM_MODEL: ${STACKS_LLM_MODEL:-gemma2:2b}
+      STACKS_LLM_API_KEY: ${STACKS_LLM_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      OLLAMA_HOST: ${OLLAMA_HOST:-http://host.docker.internal:11434}
+    restart: unless-stopped
+
+volumes:
+  stacks-data:

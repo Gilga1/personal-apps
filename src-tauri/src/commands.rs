@@ -7,7 +7,7 @@ use crate::llm::normalize::normalize_filename;
 use crate::playlist::query::build_playlist;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Emitter, State};
 
 pub struct AppState {
     pub db: Arc<Database>,
@@ -171,8 +171,11 @@ pub async fn ingest_youtube(
     let db = state.db.clone();
     let data_dir = state.data_dir.clone();
     let job_id_spawn = job_id.clone();
+    let on_progress: ingest::ProgressCallback = std::sync::Arc::new(move |ev| {
+        let _ = app.emit("ingest-progress", &ev);
+    });
     tauri::async_runtime::spawn(async move {
-        ingest::run_youtube_ingest(app, db, data_dir, job_id_spawn, url).await;
+        ingest::run_youtube_ingest(db, data_dir, job_id_spawn, url, Some(on_progress)).await;
     });
     Ok(job_id)
 }

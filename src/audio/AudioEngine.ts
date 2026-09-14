@@ -1,4 +1,4 @@
-import { convertFileSrc } from "@tauri-apps/api/core";
+import { mediaUrl } from "../api/stacks";
 
 const CROSSFADE_MS = 300;
 
@@ -43,7 +43,7 @@ class AudioEngine {
     const outgoing = this.activeIsA ? this.audioA : this.audioB;
     const isFirstTrack = !outgoing.src && !incoming.src;
 
-    incoming.src = convertFileSrc(filePath);
+    incoming.src = await mediaUrl(filePath);
     await incoming.load();
 
     if (this.audioCtx?.state === "suspended") {

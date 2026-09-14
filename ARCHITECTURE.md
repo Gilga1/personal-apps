@@ -34,7 +34,7 @@ A private, ad-free, local-first desktop music player for a mixed collection (Wes
 ## 3. Project structure
 
 ```
-app/music-app/
+stacks/
 ├── src-tauri/                        # Rust backend
 │   ├── src/
 │   │   ├── library/
@@ -52,26 +52,26 @@ app/music-app/
 │   │   │   └── normalize.rs          # metadata + mood enrichment
 │   │   ├── playlist/
 │   │   │   └── query.rs              # NL assistant: keyword retrieval + LLM re-rank
-│   │   └── commands.rs               # #[tauri::command] IPC surface
+│   │   ├── server.rs                 # HTTP API (Docker / web mode)
+│   │   └── commands.rs               # #[tauri::command] IPC (desktop)
 │   ├── Cargo.toml
 │   └── tauri.conf.json
 ├── src/                               # React frontend
 │   ├── components/
-│   │   ├── Turntable/                 # vinyl, tonearm, ambient glow
+│   │   ├── Turntable/
 │   │   ├── NowPlaying/
-│   │   ├── Library/                   # virtualized track table
-│   │   ├── Ingest/                    # YouTube URL import panel
-│   │   ├── Playlists/                 # save/load playlists
+│   │   ├── Library/
+│   │   ├── Ingest/
+│   │   ├── Playlists/
 │   │   ├── MoodChips/
-│   │   ├── CommandBar/                # NL playlist input
-│   │   └── Settings/                  # LLM provider configuration
+│   │   ├── CommandBar/
+│   │   └── Settings/
 │   ├── audio/
-│   │   └── AudioEngine.ts             # singleton: dual <audio> + crossfade + analyser
+│   │   └── AudioEngine.ts
 │   ├── state/
-│   │   ├── libraryStore.ts
-│   │   ├── playerStore.ts
-│   │   └── settingsStore.ts
 │   └── App.tsx
+├── Dockerfile
+├── docker-compose.yml
 ├── ARCHITECTURE.md
 ├── SPEC.md
 └── package.json
@@ -153,14 +153,23 @@ For `tag_source = 'filename_fallback'` tracks (or on explicit request), the conf
 
 This app lives on the **`app/music-app`** branch of [personal-apps](https://github.com/Gilga1/personal-apps).
 
+**Code is at the branch root** — there is no nested `app/music-app/` folder on this branch.
+
 | Branch | Contents |
 |--------|----------|
-| `main` | Shell only — umbrella README and LICENSE. **No app code, no shared dependencies.** |
-| `app/music-app` | Full Stacks source at `app/music-app/` (this branch) |
-| `app/nutrition-app` | ThaliScan only |
-| `app/stress-buster` | Breathe only |
+| `main` | Shell only — umbrella README and LICENSE. No app code. |
+| `app/music-app` | Full Stacks source at **branch root** (this branch) |
+| `app/nutrition-app` | ThaliScan at branch root |
+| `app/stress-buster` | Breathe at branch root |
 
-Each app branch is self-contained: its own `package.json`, lockfile, and runtime deps. Versions do not need to align across apps because nothing is installed or built from `main`.
+Each app branch is self-contained: its own lockfiles and runtime deps. Versions do not need to align across apps.
+
+### Deployment modes
+
+| Mode | How |
+|------|-----|
+| Desktop | `npm run tauri dev` / `tauri build` |
+| Docker | `docker compose up --build` — HTTP API + static UI, mount music at `/music` |
 
 ---
 

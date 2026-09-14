@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
-import { listen } from "@tauri-apps/api/event";
 import {
   checkYtdlpAvailable,
   getIngestJobs,
   ingestYoutube,
+  isWebMode,
 } from "../../api/stacks";
-import type { IngestJob, IngestProgressEvent } from "../../types";
+import type { IngestJob } from "../../types";
 
 interface IngestPanelProps {
   onIngestComplete: () => void;
@@ -15,7 +15,6 @@ export function IngestPanel({ onIngestComplete }: IngestPanelProps) {
   const [url, setUrl] = useState("");
   const [jobs, setJobs] = useState<IngestJob[]>([]);
   const [ytdlpOk, setYtdlpOk] = useState(true);
-  const [progress, setProgress] = useState<Record<string, number>>({});
 
   const refresh = async () => {
     const [available, list] = await Promise.all([
@@ -23,22 +22,45 @@ export function IngestPanel({ onIngestComplete }: IngestPanelProps) {
       getIngestJobs(),
     ]);
     setYtdlpOk(available);
+    const prevActive = jobs.some(
+      (j) =>
+        j.status === "queued" ||
+        j.status === "downloading" ||
+        j.status === "normalizing",
+    );
+    const nowDone = list.some((j) => j.status === "done");
     setJobs(list);
+    if (prevActive && nowDone) onIngestComplete();
   };
 
   useEffect(() => {
     refresh();
-    const unlisten = listen<IngestProgressEvent>("ingest-progress", (ev) => {
-      const { job_id, progress: pct, status } = ev.payload;
-      setProgress((p) => ({ ...p, [job_id]: pct }));
-      if (status === "done" || status === "failed") {
-        refresh();
-        if (status === "done") onIngestComplete();
-      }
-    });
+    if (isWebMode()) {
+      const id = setInterval(refresh, 2000);
+      return () => clearInterval(id);
+    }
+
+    let cancelled = false;
+    let unlistenFn: (() => void) | undefined;
+    (async () => {
+      const { listen } = await import("@tauri-apps/api/event");
+      if (cancelled) return;
+      unlistenFn = await listen<{
+        job_id: string;
+        status: string;
+        progress: number;
+      }>("ingest-progress", (ev) => {
+        if (ev.payload.status === "done" || ev.payload.status === "failed") {
+          refresh();
+          if (ev.payload.status === "done") onIngestComplete();
+        }
+      });
+    })();
     return () => {
-      unlisten.then((fn) => fn());
+      cancelled = true;
+      unlistenFn?.();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [onIngestComplete]);
 
   const submit = async () => {
@@ -54,7 +76,10 @@ export function IngestPanel({ onIngestComplete }: IngestPanelProps) {
   };
 
   const activeJobs = jobs.filter(
-    (j) => j.status === "queued" || j.status === "downloading" || j.status === "normalizing",
+    (j) =>
+      j.status === "queued" ||
+      j.status === "downloading" ||
+      j.status === "normalizing",
   );
 
   return (
@@ -68,7 +93,11 @@ export function IngestPanel({ onIngestComplete }: IngestPanelProps) {
           onKeyDown={(e) => e.key === "Enter" && submit()}
           disabled={!ytdlpOk}
         />
-        <button type="button" onClick={submit} disabled={!ytdlpOk || !url.trim()}>
+        <button
+          type="button"
+          onClick={submit}
+          disabled={!ytdlpOk || !url.trim()}
+        >
           Import
         </button>
       </div>
@@ -90,10 +119,7 @@ export function IngestPanel({ onIngestComplete }: IngestPanelProps) {
                 </span>
               </div>
               <div className="ingest-bar">
-                <div
-                  className="ingest-bar-fill"
-                  style={{ width: `${progress[job.id] ?? 0}%` }}
-                />
+                <div className="ingest-bar-fill" style={{ width: "60%" }} />
               </div>
             </div>
           ))}
