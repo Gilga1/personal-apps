@@ -1,26 +1,32 @@
 # Personal Apps
 
-A collection of small, private tools built for everyday use. Each app lives in its own folder and is developed on its own branch.
+A collection of small, private tools. **Each app is a self-contained project on its own branch** — its own dependencies, versions, and build tooling. Nothing is shared at runtime.
+
+This `main` branch is only an index. It has no app code and no `package.json` / `requirements.txt`.
 
 ## Apps
 
-| App | Folder | Branch | Description |
-|-----|--------|--------|-------------|
-| **ThaliScan** | [`app/nutrition-app`](app/nutrition-app) | `app/nutrition-app` | Photo-based calorie estimator for North Indian vegetarian meals |
-| **Breathe** | [`app/stress-buster`](app/stress-buster) | `app/stress-buster` | Guided breathing exercises with animated cues and haptics |
-| **Stacks** | [`app/music-app`](app/music-app) | `app/music-app` | Local-first desktop music player with mood tags and configurable LLM enrichment |
+| App | Branch | Description |
+|-----|--------|-------------|
+| **ThaliScan** | [`app/nutrition-app`](https://github.com/Gilga1/personal-apps/tree/app/nutrition-app) | Photo-based calorie estimator for North Indian vegetarian meals |
+| **Breathe** | [`app/stress-buster`](https://github.com/Gilga1/personal-apps/tree/app/stress-buster) | Guided breathing exercises with animated cues and haptics |
+| **Stacks** | [`app/music-app`](https://github.com/Gilga1/personal-apps/tree/app/music-app) | Local-first desktop music player with mood tags and configurable LLM enrichment |
 
 ## Working on an app
 
-Check out the app branch to develop or deploy:
+Check out the app branch. All code and dependencies for that app live on that branch only:
 
-```powershell
+```bash
 git checkout app/nutrition-app   # ThaliScan
 git checkout app/stress-buster     # Breathe
 git checkout app/music-app         # Stacks
 ```
 
-Each app has its own README with setup and run instructions.
+Then follow the README on that branch for setup and run instructions.
+
+### Why branches, not folders on main?
+
+Each app can pin different library versions (Node, Python, Rust crates, etc.) without conflicting with the others. `main` stays a lightweight guide — not a monorepo with shared `node_modules` or a root lockfile.
 
 ## License
 
