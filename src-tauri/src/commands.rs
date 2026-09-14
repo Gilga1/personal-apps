@@ -27,7 +27,11 @@ pub async fn pick_library_folder(app: tauri::AppHandle) -> Result<Option<String>
 
 #[tauri::command]
 pub async fn scan_library(path: String, state: State<'_, AppState>) -> Result<u32, String> {
-    scan_directory(&state.db, PathBuf::from(&path).as_path())
+    let db = state.db.clone();
+    let path = PathBuf::from(path);
+    tokio::task::spawn_blocking(move || scan_directory(&db, path.as_path()))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]

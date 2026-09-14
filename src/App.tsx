@@ -1,3 +1,4 @@
+import { motion } from "framer-motion";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   buildPlaylistQueue,
@@ -16,6 +17,7 @@ import { SettingsModal } from "./components/Settings/SettingsModal";
 import { useLibraryStore } from "./state/libraryStore";
 import { getCurrentTrack, usePlayerStore } from "./state/playerStore";
 import { useSettingsStore } from "./state/settingsStore";
+import { isFullscreen, toggleFullscreen } from "./utils/fullscreen";
 import "./styles/stacks.css";
 
 function App() {
@@ -50,10 +52,15 @@ function App() {
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [queuePrompt, setQueuePrompt] = useState<string | null>(null);
+  const [fullscreen, setFullscreen] = useState(false);
 
   const refreshTracks = useCallback(async () => {
-    const data = await getTracks();
-    setTracks(data);
+    try {
+      const data = await getTracks();
+      setTracks(data);
+    } catch (err) {
+      console.error("Failed to load tracks:", err);
+    }
   }, [setTracks]);
 
   useEffect(() => {
@@ -107,10 +114,17 @@ function App() {
       const track = tracks.find((t) => t.id === trackId);
       if (!track) return;
       setCurrentTrackId(trackId);
-      await audioEngine.loadAndPlay(track.file_path);
-      audioEngine.setVolume(volume);
-      setIsPlaying(true);
-      audioEngine.setPlaying(true);
+      try {
+        await audioEngine.loadAndPlay(track.file_path);
+        audioEngine.setVolume(volume);
+        setIsPlaying(true);
+        audioEngine.setPlaying(true);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        alert(`Could not play this track: ${message}`);
+        setIsPlaying(false);
+        audioEngine.setPlaying(false);
+      }
     },
     [tracks, volume, setCurrentTrackId, setIsPlaying],
   );
@@ -153,29 +167,45 @@ function App() {
   );
 
   useEffect(() => {
-    const audio = audioEngine.element;
-    const onTime = () => setCurrentTime(audio.currentTime);
-    const onMeta = () => setDuration(audio.duration || 0);
-    const onEnd = () => {
-      step(1);
-    };
-    audio.addEventListener("timeupdate", onTime);
-    audio.addEventListener("loadedmetadata", onMeta);
-    audio.addEventListener("ended", onEnd);
+    const unsubscribe = audioEngine.onProgress((time, dur) => {
+      setCurrentTime(time);
+      setDuration(dur);
+    });
     return () => {
-      audio.removeEventListener("timeupdate", onTime);
-      audio.removeEventListener("loadedmetadata", onMeta);
-      audio.removeEventListener("ended", onEnd);
+      unsubscribe();
     };
-  }, [step, currentTrackId]);
+  }, []);
+
+  useEffect(() => {
+    audioEngine.onEnded(() => {
+      step(1);
+    });
+  }, [step]);
+
+  useEffect(() => {
+    void isFullscreen().then(setFullscreen);
+  }, []);
+
+  const handleToggleFullscreen = async () => {
+    const next = await toggleFullscreen();
+    setFullscreen(next);
+  };
 
   const pickFolder = async () => {
     const folder = await pickLibraryFolder();
     if (!folder) return;
     setLoading(true);
     try {
-      await scanLibrary(folder);
+      const added = await scanLibrary(folder);
       await refreshTracks();
+      if (added === 0) {
+        alert(
+          "No FLAC or MP3 files found in that folder. Try a folder that contains audio files.",
+        );
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      alert(`Library scan failed: ${message}`);
     } finally {
       setLoading(false);
     }
@@ -208,18 +238,32 @@ function App() {
   const currentTrack = getCurrentTrack(tracks, currentTrackId);
 
   return (
-    <div className="app">
-      <header>
+    <div className={`app ${fullscreen ? "is-fullscreen" : ""}`}>
+      <motion.header
+        initial={{ opacity: 0, y: -8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4 }}
+      >
         <div>
           <div className="wordmark serif">Stacks</div>
           <div className="tagline">a fireside for a scattered collection</div>
         </div>
-        <div className="counts">
-          {loading
-            ? "Scanning…"
-            : `${tracks.length} track${tracks.length === 1 ? "" : "s"} loaded`}
+        <div className="header-actions">
+          <div className="counts">
+            {loading
+              ? "Scanning…"
+              : `${tracks.length} track${tracks.length === 1 ? "" : "s"} loaded`}
+          </div>
+          <button
+            type="button"
+            className="icon-btn"
+            title={fullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+            onClick={handleToggleFullscreen}
+          >
+            {fullscreen ? "⤓" : "⤢"}
+          </button>
         </div>
-      </header>
+      </motion.header>
 
       <NowPlaying
         track={currentTrack}
@@ -243,7 +287,13 @@ function App() {
         onMoodFilter={setMoodFilter}
       />
 
-      <section className="library" style={{ marginTop: 0, border: "none", background: "transparent", padding: 0 }}>
+      <motion.section
+        className="library"
+        style={{ marginTop: 0, border: "none", background: "transparent", padding: 0 }}
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.45, delay: 0.08 }}
+      >
         <CommandBar
           onBuildQueue={handleBuildQueue}
           llmEnabled={!!llmConfig}
@@ -254,8 +304,13 @@ function App() {
           queuePrompt={queuePrompt}
           onLoadPlaylist={handleLoadPlaylist}
         />
-      </section>
+      </motion.section>
 
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.45, delay: 0.12 }}
+      >
       <Library
         tracks={filteredTracks}
         currentTrackId={currentTrackId}
@@ -270,6 +325,7 @@ function App() {
         }}
         onMoodClick={handleMoodClick}
       />
+      </motion.div>
 
       <SettingsModal />
     </div>
