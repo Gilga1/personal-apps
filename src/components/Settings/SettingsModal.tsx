@@ -1,3 +1,4 @@
+import { AnimatePresence, motion } from "framer-motion";
 import { useEffect, useState } from "react";
 import {
   getLlmConfig,
@@ -29,17 +30,19 @@ export function SettingsModal() {
     })();
   }, [settingsOpen, storeLlmConfig, setProviders]);
 
-  if (!settingsOpen || !config) return null;
-
-  const currentProvider = providers.find((p) => p.id === config.provider);
+  const currentProvider = config
+    ? providers.find((p) => p.id === config.provider)
+    : undefined;
 
   const save = async () => {
+    if (!config) return;
     await setLlmConfig(config);
     storeLlmConfig(config);
     setStatus("Settings saved.");
   };
 
   const test = async () => {
+    if (!config) return;
     setStatus("Testing connection…");
     try {
       await setLlmConfig(config);
@@ -61,8 +64,23 @@ export function SettingsModal() {
   };
 
   return (
-    <div className="modal-backdrop" onClick={() => setSettingsOpen(false)}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
+    <AnimatePresence>
+      {settingsOpen && config && (
+    <motion.div
+      className="modal-backdrop"
+      onClick={() => setSettingsOpen(false)}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+    >
+      <motion.div
+        className="modal"
+        onClick={(e) => e.stopPropagation()}
+        initial={{ opacity: 0, y: 16, scale: 0.98 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 10, scale: 0.98 }}
+        transition={{ duration: 0.25 }}
+      >
         <h2>LLM settings</h2>
         <p className="modal-sub">
           Configure OpenRouter, OpenAI, Gemini, or a local Ollama model (including
@@ -165,8 +183,10 @@ export function SettingsModal() {
         </div>
 
         {status && <p className="modal-status">{status}</p>}
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
+      )}
+    </AnimatePresence>
   );
 }
 
