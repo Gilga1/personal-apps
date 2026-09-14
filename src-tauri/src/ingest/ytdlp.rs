@@ -52,16 +52,12 @@ pub fn yt_dlp_available(data_dir: &Path) -> bool {
 }
 
 pub async fn ensure_yt_dlp(data_dir: &Path) -> Result<PathBuf, String> {
+    let dest = local_yt_dlp_path(data_dir);
     if yt_dlp_available(data_dir) {
-        return Ok(local_yt_dlp_path(data_dir));
-    }
-
-    if YTDLP_SETUP.get().is_some() {
-        return Ok(local_yt_dlp_path(data_dir));
+        return Ok(dest);
     }
 
     std::fs::create_dir_all(data_dir).map_err(|e| e.to_string())?;
-    let dest = local_yt_dlp_path(data_dir);
 
     #[cfg(windows)]
     let url = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe";
@@ -89,7 +85,6 @@ pub async fn ensure_yt_dlp(data_dir: &Path) -> Result<PathBuf, String> {
         std::fs::set_permissions(&dest, perms).map_err(|e| e.to_string())?;
     }
 
-    let _ = YTDLP_SETUP.set(());
     Ok(dest)
 }
 
