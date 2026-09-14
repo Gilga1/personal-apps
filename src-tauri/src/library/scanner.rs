@@ -37,11 +37,17 @@ pub fn scan_directory(db: &Database, root: &Path) -> Result<u32, String> {
             .and_then(|n| n.to_str());
         let folder_path = path.parent().map(|p| p.to_string_lossy().to_string());
 
-        let parsed = parse_audio_file(path, folder_name)?;
+        let parsed = match parse_audio_file(path, folder_name) {
+            Ok(parsed) => parsed,
+            Err(err) => {
+                eprintln!("Skipping {}: {}", path.display(), err);
+                continue;
+            }
+        };
         let mood = classify_mood(&parsed, folder_name);
         let format = ext.unwrap_or_else(|| "unknown".to_string());
 
-        db.upsert_track(
+        if let Err(err) = db.upsert_track(
             &path.to_string_lossy(),
             &parsed.title,
             &parsed.artist,
@@ -54,7 +60,10 @@ pub fn scan_directory(db: &Database, root: &Path) -> Result<u32, String> {
             folder_path.as_deref(),
             &mood,
             "rule_engine",
-        )?;
+        ) {
+            eprintln!("Skipping {}: {}", path.display(), err);
+            continue;
+        }
         added += 1;
     }
 

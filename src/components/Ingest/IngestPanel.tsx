@@ -1,20 +1,32 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   checkYtdlpAvailable,
+  ensureYtdlp,
   getIngestJobs,
   ingestYoutube,
   isWebMode,
 } from "../../api/stacks";
-import type { IngestJob } from "../../types";
+import { useToastStore } from "../../state/toastStore";
+import type { IngestJob, IngestProgressEvent } from "../../types";
 
 interface IngestPanelProps {
   onIngestComplete: () => void;
+  onPlaylistImported?: (trackIds: string[]) => void;
 }
 
-export function IngestPanel({ onIngestComplete }: IngestPanelProps) {
+export function IngestPanel({
+  onIngestComplete,
+  onPlaylistImported,
+}: IngestPanelProps) {
   const [url, setUrl] = useState("");
+  const [playlistName, setPlaylistName] = useState("");
   const [jobs, setJobs] = useState<IngestJob[]>([]);
   const [ytdlpOk, setYtdlpOk] = useState(true);
+  const [preparing, setPreparing] = useState(false);
+  const onCompleteRef = useRef(onIngestComplete);
+  const onPlaylistRef = useRef(onPlaylistImported);
+  onCompleteRef.current = onIngestComplete;
+  onPlaylistRef.current = onPlaylistImported;
 
   const refresh = async () => {
     const [available, list] = await Promise.all([
@@ -22,52 +34,80 @@ export function IngestPanel({ onIngestComplete }: IngestPanelProps) {
       getIngestJobs(),
     ]);
     setYtdlpOk(available);
-    const prevActive = jobs.some(
-      (j) =>
-        j.status === "queued" ||
-        j.status === "downloading" ||
-        j.status === "normalizing",
-    );
-    const nowDone = list.some((j) => j.status === "done");
     setJobs(list);
-    if (prevActive && nowDone) onIngestComplete();
   };
 
+  // Run setup once on mount — never re-run on parent re-renders (playback ticks).
   useEffect(() => {
-    refresh();
-    if (isWebMode()) {
-      const id = setInterval(refresh, 2000);
-      return () => clearInterval(id);
-    }
-
     let cancelled = false;
     let unlistenFn: (() => void) | undefined;
+    let toastId: string | null = null;
+    const { push, update, dismiss } = useToastStore.getState();
+
     (async () => {
-      const { listen } = await import("@tauri-apps/api/event");
-      if (cancelled) return;
-      unlistenFn = await listen<{
-        job_id: string;
-        status: string;
-        progress: number;
-      }>("ingest-progress", (ev) => {
-        if (ev.payload.status === "done" || ev.payload.status === "failed") {
-          refresh();
-          if (ev.payload.status === "done") onIngestComplete();
+      if (!isWebMode()) {
+        setPreparing(true);
+        try {
+          await ensureYtdlp();
+        } catch {
+          // availability check below
+        } finally {
+          if (!cancelled) setPreparing(false);
         }
-      });
+      }
+      if (!cancelled) await refresh();
     })();
+
+    let intervalId: ReturnType<typeof setInterval> | undefined;
+
+    if (isWebMode()) {
+      intervalId = setInterval(refresh, 2000);
+    } else {
+      (async () => {
+        const { listen } = await import("@tauri-apps/api/event");
+        if (cancelled) return;
+        unlistenFn = await listen<IngestProgressEvent>("ingest-progress", (ev) => {
+          const p = ev.payload;
+          if (!toastId) {
+            toastId = push("Starting YouTube import…", "progress", p.progress);
+          } else {
+            update(toastId, p.message, "progress", p.progress);
+          }
+          if (p.status === "done") {
+            if (toastId) {
+              update(toastId, p.message, "success", 100);
+              setTimeout(() => toastId && dismiss(toastId), 4000);
+            }
+            if (p.track_ids?.length) {
+              onPlaylistRef.current?.(p.track_ids);
+            }
+            refresh();
+            onCompleteRef.current();
+          }
+          if (p.status === "failed") {
+            if (toastId) {
+              update(toastId, p.message, "error");
+              setTimeout(() => toastId && dismiss(toastId), 5000);
+            }
+            refresh();
+          }
+        });
+      })();
+    }
+
     return () => {
       cancelled = true;
+      if (intervalId) clearInterval(intervalId);
       unlistenFn?.();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [onIngestComplete]);
+  }, []);
 
   const submit = async () => {
     const trimmed = url.trim();
     if (!trimmed) return;
     try {
-      await ingestYoutube(trimmed);
+      if (!isWebMode()) await ensureYtdlp();
+      await ingestYoutube(trimmed, playlistName.trim() || undefined);
       setUrl("");
       await refresh();
     } catch (e) {
@@ -84,26 +124,37 @@ export function IngestPanel({ onIngestComplete }: IngestPanelProps) {
 
   return (
     <div className="ingest-panel">
-      <div className="ingest-row">
+      <div className="ingest-row ingest-combined-row">
         <input
           className="nl-input"
           placeholder="Paste YouTube URL (video or playlist)"
           value={url}
           onChange={(e) => setUrl(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && submit()}
-          disabled={!ytdlpOk}
+          disabled={!ytdlpOk || preparing}
+        />
+        <input
+          className="search-input ingest-playlist-input"
+          placeholder="Playlist name"
+          value={playlistName}
+          onChange={(e) => setPlaylistName(e.target.value)}
+          disabled={!ytdlpOk || preparing}
+          title="Optional — saves imported tracks as a playlist"
         />
         <button
           type="button"
           onClick={submit}
-          disabled={!ytdlpOk || !url.trim()}
+          disabled={!ytdlpOk || preparing || !url.trim()}
         >
           Import
         </button>
       </div>
-      {!ytdlpOk && (
+      {preparing && (
+        <p className="ingest-hint">Setting up YouTube import (one-time)…</p>
+      )}
+      {!preparing && !ytdlpOk && (
         <p className="ingest-warn">
-          yt-dlp not found — install it to import from YouTube.
+          yt-dlp not available — restart the app to retry setup.
         </p>
       )}
       {activeJobs.length > 0 && (

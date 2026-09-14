@@ -67,6 +67,12 @@ body::after {
   padding: 28px 28px 60px;
   position: relative;
   z-index: 1;
+  transition: max-width 0.3s ease, padding 0.3s ease;
+}
+
+.app.is-fullscreen {
+  max-width: none;
+  padding: 36px 48px 48px;
 }
 
 header {
@@ -87,10 +93,36 @@ header .tagline {
   margin-top: 4px;
 }
 
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 header .counts {
   color: var(--text-muted);
   font-size: 13px;
   text-align: right;
+}
+
+.icon-btn {
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+  cursor: pointer;
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 0.2s, color 0.2s, background 0.2s;
+}
+
+.icon-btn:hover {
+  border-color: var(--accent-amber);
+  color: var(--accent-amber);
 }
 
 .now-playing {
@@ -105,6 +137,12 @@ header .counts {
   position: relative;
   overflow: hidden;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  transition: box-shadow 0.3s ease;
+}
+
+.now-playing:hover {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03),
+    0 8px 32px rgba(10, 6, 3, 0.25);
 }
 
 .plinth {
@@ -327,6 +365,14 @@ input[type="range"]::-webkit-slider-thumb {
   box-shadow: 0 0 0 3px rgba(219, 164, 99, 0.18);
 }
 
+.transport-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 4px;
+}
+
 .transport {
   display: flex;
   align-items: center;
@@ -370,12 +416,44 @@ input[type="range"]::-webkit-slider-thumb {
   color: var(--accent-amber);
 }
 
-.vol-row {
+.volume-panel {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-left: auto;
-  width: 130px;
+  min-width: 180px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.18);
+  border: 1px solid var(--border);
+}
+
+.vol-icon {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 16px;
+  padding: 0;
+  line-height: 1;
+  opacity: 0.85;
+  transition: opacity 0.15s, transform 0.15s;
+}
+
+.vol-icon:hover {
+  opacity: 1;
+  transform: scale(1.08);
+}
+
+.volume-slider {
+  flex: 1;
+  min-width: 80px;
+}
+
+.vol-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  width: 34px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
 .mood-row {
@@ -393,7 +471,13 @@ input[type="range"]::-webkit-slider-thumb {
   border: 1px solid var(--border);
   color: var(--text-muted);
   background: transparent;
-  transition: all 0.15s ease;
+  transition: border-color 0.2s ease, color 0.2s ease, background 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.mood-chip.active {
+  background: rgba(219, 164, 99, 0.08);
+  box-shadow: 0 0 0 1px rgba(219, 164, 99, 0.12);
 }
 
 .mood-chip[data-mood="Deep Focus"].active,
@@ -445,6 +529,11 @@ input[type="range"]::-webkit-slider-thumb {
   border: 1px solid var(--border);
   border-radius: 18px;
   padding: 24px 28px 12px;
+  transition: box-shadow 0.3s ease;
+}
+
+.library:hover {
+  box-shadow: 0 4px 24px rgba(10, 6, 3, 0.15);
 }
 
 .lib-head {
@@ -545,14 +634,16 @@ thead th {
 tbody tr {
   cursor: pointer;
   border-bottom: 1px solid var(--border);
+  transition: background 0.2s ease, transform 0.15s ease;
 }
 
 tbody tr:hover {
-  background: rgba(241, 233, 218, 0.03);
+  background: rgba(241, 233, 218, 0.05);
 }
 
 tbody tr.playing-row {
-  background: rgba(219, 164, 99, 0.08);
+  background: rgba(219, 164, 99, 0.1);
+  box-shadow: inset 3px 0 0 var(--accent-amber);
 }
 
 tbody td {
@@ -615,6 +706,37 @@ tr.playing-row .eq {
   max-height: 420px;
   overflow-y: auto;
   margin-top: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(227, 167, 88, 0.45) rgba(45, 33, 22, 0.9);
+  padding-right: 4px;
+}
+
+.virt-scroll::-webkit-scrollbar {
+  width: 9px;
+}
+
+.virt-scroll::-webkit-scrollbar-track {
+  background: rgba(45, 33, 22, 0.85);
+  border-radius: 10px;
+  margin: 4px 0;
+}
+
+.virt-scroll::-webkit-scrollbar-thumb {
+  background: linear-gradient(
+    180deg,
+    rgba(227, 167, 88, 0.55),
+    rgba(184, 102, 63, 0.45)
+  );
+  border-radius: 10px;
+  border: 2px solid rgba(45, 33, 22, 0.85);
+}
+
+.virt-scroll::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(
+    180deg,
+    rgba(227, 167, 88, 0.75),
+    rgba(184, 102, 63, 0.65)
+  );
 }
 
 .virt-inner {
@@ -868,6 +990,115 @@ tr.playing-row .eq {
   margin: 0;
 }
 
+.toast-stack {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: min(420px, calc(100vw - 48px));
+  pointer-events: none;
+}
+
+.toast {
+  pointer-events: auto;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 14px;
+  box-shadow: 0 12px 32px rgba(10, 6, 3, 0.35);
+}
+
+.toast-success {
+  border-color: rgba(131, 143, 87, 0.5);
+}
+
+.toast-error {
+  border-color: rgba(184, 102, 63, 0.55);
+}
+
+.toast-progress {
+  border-color: rgba(227, 167, 88, 0.45);
+}
+
+.toast-body {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.toast-close {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  padding: 0;
+}
+
+.toast-bar {
+  height: 4px;
+  background: rgba(241, 233, 218, 0.1);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-top: 8px;
+}
+
+.toast-bar-fill {
+  height: 100%;
+  background: var(--accent-amber);
+  transition: width 0.25s ease;
+}
+
+.queue-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: rgba(219, 164, 99, 0.08);
+  border: 1px solid rgba(219, 164, 99, 0.2);
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.queue-banner strong {
+  color: var(--text);
+}
+
+.reset-queue-btn {
+  flex: 0 0 auto;
+}
+
+.ingest-combined-row {
+  flex-wrap: wrap;
+}
+
+.ingest-combined-row .nl-input {
+  flex: 2 1 280px;
+  min-width: 200px;
+}
+
+.ingest-playlist-input {
+  flex: 1 1 140px;
+  min-width: 120px;
+  width: auto;
+}
+
+.ingest-hint {
+  color: var(--text-muted);
+  font-size: 12px;
+  margin: 0 0 12px;
+}
+
 @media (max-width: 760px) {
   .now-playing {
     grid-template-columns: 1fr;
@@ -876,5 +1107,14 @@ tr.playing-row .eq {
   .turntable {
     width: 220px;
     height: 220px;
+  }
+
+  .transport-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .volume-panel {
+    min-width: 0;
   }
 }

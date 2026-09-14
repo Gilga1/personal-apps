@@ -1,45 +1,80 @@
+import { AnimatePresence, motion } from "framer-motion";
 import { useEffect, useState } from "react";
 import {
   getLlmConfig,
+  getUseLlmRerank,
   listLlmProviders,
   normalizeLowConfidence,
   setLlmConfig,
+  setUseLlmRerank,
   testLlmConnection,
 } from "../../api/stacks";
 import { useSettingsStore } from "../../state/settingsStore";
-import type { LlmConfig, LlmProvider } from "../../types";
+import { useToastStore } from "../../state/toastStore";
+import type { EnrichProgressEvent, LlmConfig, LlmProvider } from "../../types";
 
 export function SettingsModal() {
-  const { settingsOpen, setSettingsOpen, providers, setProviders, setLlmConfig: storeLlmConfig } =
-    useSettingsStore();
+  const {
+    settingsOpen,
+    setSettingsOpen,
+    providers,
+    setProviders,
+    setLlmConfig: storeLlmConfig,
+    useLlmRerank,
+    setUseLlmRerank: storeSetUseLlmRerank,
+  } = useSettingsStore();
+  const { push, update, dismiss } = useToastStore();
   const [config, setConfig] = useState<LlmConfig | null>(null);
   const [status, setStatus] = useState<string>("");
-  const [useLlmRerank, setUseLlmRerank] = useState(true);
 
   useEffect(() => {
     if (!settingsOpen) return;
     (async () => {
-      const [cfg, prov] = await Promise.all([
+      const [cfg, prov, rerank] = await Promise.all([
         getLlmConfig(),
         listLlmProviders(),
+        getUseLlmRerank(),
       ]);
       setConfig(cfg);
       storeLlmConfig(cfg);
       setProviders(prov);
+      storeSetUseLlmRerank(rerank);
     })();
-  }, [settingsOpen, storeLlmConfig, setProviders]);
+  }, [settingsOpen, storeLlmConfig, setProviders, storeSetUseLlmRerank]);
 
-  if (!settingsOpen || !config) return null;
+  useEffect(() => {
+    if (!settingsOpen) return;
+    let unlisten: (() => void) | undefined;
+    let toastId: string | null = null;
+    const { push, update } = useToastStore.getState();
+    (async () => {
+      const { listen } = await import("@tauri-apps/api/event");
+      unlisten = await listen<EnrichProgressEvent>("enrich-progress", (ev) => {
+        const p = ev.payload;
+        const pct = p.total ? (p.current / p.total) * 100 : 0;
+        if (!toastId) {
+          toastId = push("Enriching low-confidence tracks…", "progress", pct);
+        } else {
+          update(toastId, p.message, "progress", pct);
+        }
+      });
+    })();
+    return () => unlisten?.();
+  }, [settingsOpen]);
 
-  const currentProvider = providers.find((p) => p.id === config.provider);
+  const currentProvider = config
+    ? providers.find((p) => p.id === config.provider)
+    : undefined;
 
   const save = async () => {
+    if (!config) return;
     await setLlmConfig(config);
     storeLlmConfig(config);
     setStatus("Settings saved.");
   };
 
   const test = async () => {
+    if (!config) return;
     setStatus("Testing connection…");
     try {
       await setLlmConfig(config);
@@ -51,18 +86,40 @@ export function SettingsModal() {
   };
 
   const enrich = async () => {
+    const toastId = push("Enriching low-confidence tracks…", "progress", 0);
     setStatus("Enriching low-confidence tracks…");
     try {
       const count = await normalizeLowConfidence();
-      setStatus(`Enriched ${count} track(s).`);
+      const msg = `Enriched ${count} track(s).`;
+      setStatus(msg);
+      update(toastId, msg, "success", 100);
+      setTimeout(() => dismiss(toastId), 4000);
     } catch (e) {
-      setStatus(String(e));
+      const msg = String(e);
+      setStatus(msg);
+      update(toastId, msg, "error");
+      setTimeout(() => dismiss(toastId), 5000);
     }
   };
 
   return (
-    <div className="modal-backdrop" onClick={() => setSettingsOpen(false)}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
+    <AnimatePresence>
+      {settingsOpen && config && (
+    <motion.div
+      className="modal-backdrop"
+      onClick={() => setSettingsOpen(false)}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+    >
+      <motion.div
+        className="modal"
+        onClick={(e) => e.stopPropagation()}
+        initial={{ opacity: 0, y: 16, scale: 0.98 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 10, scale: 0.98 }}
+        transition={{ duration: 0.25 }}
+      >
         <h2>LLM settings</h2>
         <p className="modal-sub">
           Configure OpenRouter, OpenAI, Gemini, or a local Ollama model (including
@@ -147,7 +204,11 @@ export function SettingsModal() {
           <input
             type="checkbox"
             checked={useLlmRerank}
-            onChange={(e) => setUseLlmRerank(e.target.checked)}
+            onChange={async (e) => {
+              const enabled = e.target.checked;
+              storeSetUseLlmRerank(enabled);
+              await setUseLlmRerank(enabled);
+            }}
           />
           Use LLM for playlist re-ranking
         </label>
@@ -165,8 +226,10 @@ export function SettingsModal() {
         </div>
 
         {status && <p className="modal-status">{status}</p>}
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
+      )}
+    </AnimatePresence>
   );
 }
 

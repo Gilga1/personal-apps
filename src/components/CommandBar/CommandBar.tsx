@@ -1,12 +1,31 @@
 import { useState } from "react";
 
 interface CommandBarProps {
-  onBuildQueue: (prompt: string, useLlm: boolean) => void;
-  llmEnabled: boolean;
+  onBuildQueue: (prompt: string, useLlm: boolean) => Promise<void>;
+  useLlmRerank: boolean;
+  queueActive?: boolean;
+  onResetQueue?: () => void;
 }
 
-export function CommandBar({ onBuildQueue, llmEnabled }: CommandBarProps) {
+export function CommandBar({
+  onBuildQueue,
+  useLlmRerank,
+  queueActive,
+  onResetQueue,
+}: CommandBarProps) {
   const [prompt, setPrompt] = useState("");
+  const [building, setBuilding] = useState(false);
+
+  const build = async () => {
+    const trimmed = prompt.trim();
+    if (!trimmed || building) return;
+    setBuilding(true);
+    try {
+      await onBuildQueue(trimmed, useLlmRerank);
+    } finally {
+      setBuilding(false);
+    }
+  };
 
   return (
     <>
@@ -17,18 +36,28 @@ export function CommandBar({ onBuildQueue, llmEnabled }: CommandBarProps) {
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === "Enter" && prompt.trim()) {
-              onBuildQueue(prompt.trim(), llmEnabled);
-            }
+            if (e.key === "Enter") build();
           }}
+          disabled={building}
         />
-        <button type="button" onClick={() => prompt.trim() && onBuildQueue(prompt.trim(), llmEnabled)}>
-          Build queue
+        <button type="button" onClick={build} disabled={building || !prompt.trim()}>
+          {building ? "Building…" : "Build queue"}
         </button>
+        {queueActive && onResetQueue && (
+          <button
+            type="button"
+            className="icon-btn reset-queue-btn"
+            title="Show all tracks"
+            onClick={onResetQueue}
+          >
+            ↺
+          </button>
+        )}
       </div>
       <div className="nl-hint">
-        Keyword matching offline{llmEnabled ? " with optional LLM re-rank" : ""}.
-        Configure provider in Settings.
+        Keyword matching offline
+        {useLlmRerank ? " with optional LLM re-rank" : ""}. Configure provider in
+        Settings.
       </div>
     </>
   );
