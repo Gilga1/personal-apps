@@ -151,15 +151,16 @@ For `tag_source = 'filename_fallback'` tracks (or on explicit request), the conf
 
 ## 7. Branch & repo layout
 
-This app lives on the **`app/music-app`** branch of [personal-apps](https://github.com/Gilga1/personal-apps). Each app in the monorepo has its own branch:
+This app lives on the **`app/music-app`** branch of [personal-apps](https://github.com/Gilga1/personal-apps).
 
-| App | Branch |
-|-----|--------|
-| ThaliScan | `app/nutrition-app` |
-| Breathe | `app/stress-buster` |
-| Stacks | `app/music-app` |
+| Branch | Contents |
+|--------|----------|
+| `main` | Shell only — umbrella README and LICENSE. **No app code, no shared dependencies.** |
+| `app/music-app` | Full Stacks source at `app/music-app/` (this branch) |
+| `app/nutrition-app` | ThaliScan only |
+| `app/stress-buster` | Breathe only |
 
-The `main` branch holds only stub READMEs and the umbrella index.
+Each app branch is self-contained: its own `package.json`, lockfile, and runtime deps. Versions do not need to align across apps because nothing is installed or built from `main`.
 
 ---
 

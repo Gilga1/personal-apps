@@ -4,6 +4,8 @@ A private, ad-free, local-first desktop music player for a mixed FLAC/MP3 collec
 
 See also [ARCHITECTURE.md](./ARCHITECTURE.md) for system design and [README.md](./README.md) for setup.
 
+**Repo model:** `main` is a shell-only index (no app code). This spec applies to the `app/music-app` branch, which owns all Stacks dependencies independently of other apps.
+
 ---
 
 ## 1. Goals

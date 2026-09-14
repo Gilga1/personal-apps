@@ -2,7 +2,7 @@
 
 A private, ad-free, local-first desktop music player for mixed FLAC/MP3 collections — Western classical, Bollywood, Punjabi, pop, and everything in between.
 
-**Branch:** `app/music-app` — you are on the correct branch.
+**Branch:** `app/music-app` — all Stacks code and dependencies live on this branch only. `main` has no app code.
 
 Stack: **Tauri 2** shell · **Rust** backend (library scan, tags, SQLite) · **React + Vite + TypeScript** frontend · configurable **LLM** layer (Ollama, OpenAI, OpenRouter, Gemini).
 
