@@ -1,6 +1,6 @@
 @echo off
 setlocal
-cd /d "%~dp0backend"
+cd /d "%~dp0..\backend"
 if not exist .venv\Scripts\activate.bat (
   echo Creating venv...
   python -m venv .venv
