@@ -1,4 +1,5 @@
 import type {
+  EnrichResult,
   IngestJob,
   LlmConfig,
   LlmProviderInfo,
@@ -100,14 +101,13 @@ export async function normalizeTrack(trackId: string): Promise<Track> {
   return invokeTauri<Track>("normalize_track", { trackId });
 }
 
-export async function normalizeLowConfidence(): Promise<number> {
+export async function normalizeLowConfidence(): Promise<EnrichResult> {
   if (isWebMode()) {
-    const data = await api<{ count: number }>("/api/normalize/low-confidence", {
+    return api<EnrichResult>("/api/normalize/low-confidence", {
       method: "POST",
     });
-    return data.count;
   }
-  return invokeTauri<number>("normalize_low_confidence");
+  return invokeTauri<EnrichResult>("normalize_low_confidence");
 }
 
 export async function buildPlaylistQueue(

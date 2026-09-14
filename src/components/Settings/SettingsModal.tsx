@@ -11,7 +11,28 @@ import {
 } from "../../api/stacks";
 import { useSettingsStore } from "../../state/settingsStore";
 import { useToastStore } from "../../state/toastStore";
-import type { EnrichProgressEvent, LlmConfig, LlmProvider } from "../../types";
+import type {
+  EnrichProgressEvent,
+  EnrichResult,
+  LlmConfig,
+  LlmProvider,
+} from "../../types";
+
+function formatEnrichResult(result: EnrichResult): string {
+  if (result.total === 0) {
+    return "No filename-only tracks to enrich. Tracks with embedded tags are skipped.";
+  }
+  const parts = [
+    `Done: ${result.enriched} of ${result.total} filename-only track(s) enriched.`,
+  ];
+  if (result.failed > 0) {
+    parts.push(`${result.failed} failed.`);
+    if (result.last_error) {
+      parts.push(`Last error: ${result.last_error}`);
+    }
+  }
+  return parts.join(" ");
+}
 
 export function SettingsModal() {
   const {
@@ -26,9 +47,11 @@ export function SettingsModal() {
   const { push, update, dismiss } = useToastStore();
   const [config, setConfig] = useState<LlmConfig | null>(null);
   const [status, setStatus] = useState<string>("");
+  const [enriching, setEnriching] = useState(false);
 
   useEffect(() => {
     if (!settingsOpen) return;
+    setStatus("");
     (async () => {
       const [cfg, prov, rerank] = await Promise.all([
         getLlmConfig(),
@@ -86,19 +109,25 @@ export function SettingsModal() {
   };
 
   const enrich = async () => {
+    if (!config || enriching) return;
+    setEnriching(true);
     const toastId = push("Enriching low-confidence tracks…", "progress", 0);
-    setStatus("Enriching low-confidence tracks…");
+    setStatus("Enriching filename-only tracks…");
     try {
-      const count = await normalizeLowConfidence();
-      const msg = `Enriched ${count} track(s).`;
+      await setLlmConfig(config);
+      storeLlmConfig(config);
+      const result = await normalizeLowConfidence();
+      const msg = formatEnrichResult(result);
       setStatus(msg);
-      update(toastId, msg, "success", 100);
-      setTimeout(() => dismiss(toastId), 4000);
+      update(toastId, msg, result.failed > 0 ? "error" : "success", 100);
+      setTimeout(() => dismiss(toastId), 6000);
     } catch (e) {
       const msg = String(e);
       setStatus(msg);
       update(toastId, msg, "error");
       setTimeout(() => dismiss(toastId), 5000);
+    } finally {
+      setEnriching(false);
     }
   };
 
@@ -123,7 +152,8 @@ export function SettingsModal() {
         <h2>LLM settings</h2>
         <p className="modal-sub">
           Configure OpenRouter, OpenAI, Gemini, or a local Ollama model (including
-          small 2B models like gemma2:2b).
+          small 2B models like gemma2:2b). Enrich only updates tracks without
+          embedded tags (shown as &ldquo;Filename match&rdquo; in the player).
         </p>
 
         <label>
@@ -217,8 +247,13 @@ export function SettingsModal() {
           <button type="button" className="file-btn" onClick={test}>
             Test connection
           </button>
-          <button type="button" className="file-btn" onClick={enrich}>
-            Enrich filename matches
+          <button
+            type="button"
+            className="file-btn"
+            onClick={enrich}
+            disabled={enriching}
+          >
+            {enriching ? "Enriching…" : "Enrich filename matches"}
           </button>
           <button type="button" className="primary-btn" onClick={save}>
             Save

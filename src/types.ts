@@ -56,6 +56,13 @@ export interface EnrichProgressEvent {
   message: string;
 }
 
+export interface EnrichResult {
+  total: number;
+  enriched: number;
+  failed: number;
+  last_error?: string | null;
+}
+
 export interface PlaylistSummary {
   id: string;
   name: string;

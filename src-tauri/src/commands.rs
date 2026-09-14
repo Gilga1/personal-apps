@@ -123,15 +123,25 @@ struct EnrichProgressEvent {
     message: String,
 }
 
+#[derive(serde::Serialize, Clone)]
+pub struct EnrichResult {
+    pub total: u32,
+    pub enriched: u32,
+    pub failed: u32,
+    pub last_error: Option<String>,
+}
+
 #[tauri::command]
 pub async fn normalize_low_confidence(
     app: AppHandle,
     state: State<'_, AppState>,
-) -> Result<u32, String> {
+) -> Result<EnrichResult, String> {
     let ids = state.db.get_low_confidence_track_ids()?;
     let config = load_config_from_db(&state.db);
     let total = ids.len() as u32;
-    let mut count = 0u32;
+    let mut enriched = 0u32;
+    let mut failed = 0u32;
+    let mut last_error: Option<String> = None;
 
     for (i, id) in ids.iter().enumerate() {
         let current = i as u32 + 1;
@@ -148,23 +158,43 @@ pub async fn normalize_low_confidence(
                 .file_name()
                 .and_then(|n| n.to_str())
                 .unwrap_or(&track.title);
-            if let Ok(normalized) = normalize_filename(&config, raw_name).await {
-                let _ = state.db.apply_llm_enrichment(
-                    id,
-                    &normalized.title,
-                    &normalized.artist,
-                    &normalized.album,
-                    normalized.release_year,
-                    normalized.genre.as_deref(),
-                    &normalized.moods,
-                    normalized.energy_score,
-                    &normalized.situational_tags,
-                );
-                count += 1;
+            match normalize_filename(&config, raw_name).await {
+                Ok(normalized) => {
+                    if state
+                        .db
+                        .apply_llm_enrichment(
+                            id,
+                            &normalized.title,
+                            &normalized.artist,
+                            &normalized.album,
+                            normalized.release_year,
+                            normalized.genre.as_deref(),
+                            &normalized.moods,
+                            normalized.energy_score,
+                            &normalized.situational_tags,
+                        )
+                        .is_ok()
+                    {
+                        enriched += 1;
+                    } else {
+                        failed += 1;
+                        last_error = Some("Failed to save enriched metadata".to_string());
+                    }
+                }
+                Err(err) => {
+                    failed += 1;
+                    last_error = Some(err);
+                }
             }
         }
     }
-    Ok(count)
+
+    Ok(EnrichResult {
+        total,
+        enriched,
+        failed,
+        last_error,
+    })
 }
 
 #[tauri::command]
