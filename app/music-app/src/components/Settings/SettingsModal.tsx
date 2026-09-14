@@ -1,0 +1,175 @@
+import { useEffect, useState } from "react";
+import {
+  getLlmConfig,
+  listLlmProviders,
+  normalizeLowConfidence,
+  setLlmConfig,
+  testLlmConnection,
+} from "../../api/stacks";
+import { useSettingsStore } from "../../state/settingsStore";
+import type { LlmConfig, LlmProvider } from "../../types";
+
+export function SettingsModal() {
+  const { settingsOpen, setSettingsOpen, providers, setProviders, setLlmConfig: storeLlmConfig } =
+    useSettingsStore();
+  const [config, setConfig] = useState<LlmConfig | null>(null);
+  const [status, setStatus] = useState<string>("");
+  const [useLlmRerank, setUseLlmRerank] = useState(true);
+
+  useEffect(() => {
+    if (!settingsOpen) return;
+    (async () => {
+      const [cfg, prov] = await Promise.all([
+        getLlmConfig(),
+        listLlmProviders(),
+      ]);
+      setConfig(cfg);
+      storeLlmConfig(cfg);
+      setProviders(prov);
+    })();
+  }, [settingsOpen, storeLlmConfig, setProviders]);
+
+  if (!settingsOpen || !config) return null;
+
+  const currentProvider = providers.find((p) => p.id === config.provider);
+
+  const save = async () => {
+    await setLlmConfig(config);
+    storeLlmConfig(config);
+    setStatus("Settings saved.");
+  };
+
+  const test = async () => {
+    setStatus("Testing connection…");
+    try {
+      await setLlmConfig(config);
+      const msg = await testLlmConnection();
+      setStatus(msg);
+    } catch (e) {
+      setStatus(String(e));
+    }
+  };
+
+  const enrich = async () => {
+    setStatus("Enriching low-confidence tracks…");
+    try {
+      const count = await normalizeLowConfidence();
+      setStatus(`Enriched ${count} track(s).`);
+    } catch (e) {
+      setStatus(String(e));
+    }
+  };
+
+  return (
+    <div className="modal-backdrop" onClick={() => setSettingsOpen(false)}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <h2>LLM settings</h2>
+        <p className="modal-sub">
+          Configure OpenRouter, OpenAI, Gemini, or a local Ollama model (including
+          small 2B models like gemma2:2b).
+        </p>
+
+        <label>
+          Provider
+          <select
+            value={config.provider}
+            onChange={(e) => {
+              const provider = e.target.value as LlmProvider;
+              const models =
+                providers.find((p) => p.id === provider)?.models ?? [];
+              setConfig({
+                ...config,
+                provider,
+                model: models[0] ?? config.model,
+              });
+            }}
+          >
+            <option value="ollama">Ollama (local)</option>
+            <option value="openai">OpenAI</option>
+            <option value="openrouter">OpenRouter</option>
+            <option value="gemini">Google Gemini</option>
+          </select>
+        </label>
+
+        <label>
+          Model
+          <input
+            list="model-suggestions"
+            value={config.model}
+            onChange={(e) => setConfig({ ...config, model: e.target.value })}
+            placeholder="e.g. llama3.2:3b or google/gemma-2-2b-it"
+          />
+          <datalist id="model-suggestions">
+            {(currentProvider?.models ?? []).map((m) => (
+              <option key={m} value={m} />
+            ))}
+          </datalist>
+        </label>
+
+        {config.provider !== "ollama" && (
+          <label>
+            API key
+            <input
+              type="password"
+              value={config.api_key ?? ""}
+              onChange={(e) =>
+                setConfig({ ...config, api_key: e.target.value })
+              }
+              placeholder="Or set OPENAI_API_KEY / OPENROUTER_API_KEY / GEMINI_API_KEY"
+            />
+          </label>
+        )}
+
+        {config.provider === "ollama" && (
+          <label>
+            Ollama host
+            <input
+              value={config.ollama_host ?? "http://localhost:11434"}
+              onChange={(e) =>
+                setConfig({ ...config, ollama_host: e.target.value })
+              }
+            />
+          </label>
+        )}
+
+        <label>
+          Base URL override (optional)
+          <input
+            value={config.base_url ?? ""}
+            onChange={(e) =>
+              setConfig({ ...config, base_url: e.target.value || null })
+            }
+            placeholder="Custom API endpoint"
+          />
+        </label>
+
+        <label className="checkbox-row">
+          <input
+            type="checkbox"
+            checked={useLlmRerank}
+            onChange={(e) => setUseLlmRerank(e.target.checked)}
+          />
+          Use LLM for playlist re-ranking
+        </label>
+
+        <div className="modal-actions">
+          <button type="button" className="file-btn" onClick={test}>
+            Test connection
+          </button>
+          <button type="button" className="file-btn" onClick={enrich}>
+            Enrich filename matches
+          </button>
+          <button type="button" className="primary-btn" onClick={save}>
+            Save
+          </button>
+        </div>
+
+        {status && <p className="modal-status">{status}</p>}
+      </div>
+    </div>
+  );
+}
+
+export function useLlmRerankEnabled() {
+  return true;
+}

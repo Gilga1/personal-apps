@@ -8,6 +8,7 @@ A collection of small, private tools built for everyday use. Each app lives in i
 |-----|--------|--------|-------------|
 | **ThaliScan** | [`app/nutrition-app`](app/nutrition-app) | `app/nutrition-app` | Photo-based calorie estimator for North Indian vegetarian meals |
 | **Breathe** | [`app/stress-buster`](app/stress-buster) | `app/stress-buster` | Guided breathing exercises with animated cues and haptics |
+| **Stacks** | [`app/music-app`](app/music-app) | `app/music-app` | Local-first desktop music player with mood tags and configurable LLM enrichment |
 
 ## Working on an app
 
@@ -16,6 +17,7 @@ Check out the app branch to develop or deploy:
 ```powershell
 git checkout app/nutrition-app   # ThaliScan
 git checkout app/stress-buster     # Breathe
+git checkout app/music-app         # Stacks
 ```
 
 Each app has its own README with setup and run instructions.
