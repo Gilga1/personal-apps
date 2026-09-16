@@ -56,6 +56,26 @@ export async function getTracks(): Promise<Track[]> {
   return invokeTauri<Track[]>("get_tracks");
 }
 
+export async function deleteTag(tag: string): Promise<number> {
+  if (isWebMode()) {
+    const data = await api<{ count: number }>(`/api/tags/${encodeURIComponent(tag)}`, {
+      method: "DELETE",
+    });
+    return data.count;
+  }
+  return invokeTauri<number>("delete_tag", { tag });
+}
+
+export async function toggleTrackLike(trackId: string): Promise<boolean> {
+  if (isWebMode()) {
+    const data = await api<{ liked: boolean }>(`/api/tracks/${trackId}/like`, {
+      method: "POST",
+    });
+    return data.liked;
+  }
+  return invokeTauri<boolean>("toggle_track_like", { trackId });
+}
+
 export async function setTracksMood(
   trackIds: string[],
   mood: string,

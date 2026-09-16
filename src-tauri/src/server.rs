@@ -77,6 +77,8 @@ pub async fn run_server() {
         .route("/api/tracks", get(get_tracks))
         .route("/api/scan", post(scan_library))
         .route("/api/mood/{track_id}", post(set_mood))
+        .route("/api/tags/{tag}", axum::routing::delete(delete_tag))
+        .route("/api/tracks/{track_id}/like", post(toggle_like))
         .route("/api/llm/config", get(get_llm).post(set_llm))
         .route("/api/llm/test", post(test_llm))
         .route("/api/llm/providers", get(list_providers))
@@ -144,6 +146,24 @@ async fn scan_library(
 #[derive(Deserialize)]
 struct MoodBody {
     mood: Option<String>,
+}
+
+#[cfg(feature = "server")]
+async fn delete_tag(
+    State(state): State<AppState>,
+    Path(tag): Path<String>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let count = state.db.delete_tag_globally(&tag)?;
+    Ok(Json(serde_json::json!({ "count": count })))
+}
+
+#[cfg(feature = "server")]
+async fn toggle_like(
+    State(state): State<AppState>,
+    Path(track_id): Path<String>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let liked = state.db.toggle_track_like(&track_id)?;
+    Ok(Json(serde_json::json!({ "liked": liked })))
 }
 
 #[cfg(feature = "server")]

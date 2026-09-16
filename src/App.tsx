@@ -2,11 +2,13 @@ import { motion } from "framer-motion";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   buildPlaylistQueue,
+  deleteTag,
   getTracks,
   getUseLlmRerank,
   pickLibraryFolder,
   scanLibrary,
   setTracksMood,
+  toggleTrackLike,
 } from "./api/stacks";
 import { audioEngine } from "./audio/AudioEngine";
 import { CommandBar } from "./components/CommandBar/CommandBar";
@@ -91,7 +93,10 @@ function App() {
       return pool;
     }
     if (moodFilter) {
-      pool = pool.filter((t) => t.mood === moodFilter);
+      pool = pool.filter(
+        (t) =>
+          t.mood === moodFilter || t.situational_tags.includes(moodFilter),
+      );
     }
     if (searchText) {
       const q = searchText.toLowerCase();
@@ -109,7 +114,12 @@ function App() {
         .filter(Boolean) as typeof tracks;
     }
     let pool = tracks;
-    if (moodFilter) pool = pool.filter((t) => t.mood === moodFilter);
+    if (moodFilter) {
+      pool = pool.filter(
+        (t) =>
+          t.mood === moodFilter || t.situational_tags.includes(moodFilter),
+      );
+    }
     if (searchText) {
       const q = searchText.toLowerCase();
       pool = pool.filter((t) =>
@@ -261,6 +271,15 @@ function App() {
     [filteredTracks],
   );
 
+  const allTags = useMemo(() => {
+    const set = new Set<string>();
+    for (const t of tracks) {
+      if (t.mood && t.mood !== "Unsorted") set.add(t.mood);
+      for (const tag of t.situational_tags) set.add(tag);
+    }
+    return [...set].sort((a, b) => a.localeCompare(b));
+  }, [tracks]);
+
   const handleTagTracks = async (trackIds: string[], mood: string) => {
     if (!trackIds.length) return;
     await setTracksMood(trackIds, mood);
@@ -271,6 +290,40 @@ function App() {
       }
     }
     setSelectedIds(new Set());
+  };
+
+  const handleCreateTag = async (tag: string) => {
+    const trimmed = tag.trim();
+    if (!trimmed || trimmed === "Unsorted") return;
+    const ids =
+      selectedIds.size > 0
+        ? Array.from(selectedIds)
+        : currentTrackId
+          ? [currentTrackId]
+          : [];
+    if (!ids.length) {
+      const toastId = push(
+        "Select tracks in the library, or play one, then press + to tag.",
+        "error",
+      );
+      setTimeout(() => dismiss(toastId), 4000);
+      return;
+    }
+    await handleTagTracks(ids, trimmed);
+  };
+
+  const handleDeleteTag = async (tag: string) => {
+    await deleteTag(tag);
+    if (moodFilter === tag) setMoodFilter(null);
+    await refreshTracks();
+  };
+
+  const handleToggleLike = async (trackId?: string) => {
+    const id = trackId ?? currentTrackId;
+    if (!id) return;
+    const liked = await toggleTrackLike(id);
+    const track = tracks.find((t) => t.id === id);
+    if (track) updateTrack({ ...track, liked });
   };
 
   const resetQueue = useCallback(() => {
@@ -363,18 +416,17 @@ function App() {
         currentTime={currentTime}
         duration={duration}
         volume={volume}
-        moodFilter={moodFilter}
         onPlayPause={togglePlayPause}
         onPrev={() => step(-1)}
         onNext={() => step(1)}
         onShuffle={toggleShuffle}
         onCrossfade={toggleCrossfade}
+        onToggleLike={handleToggleLike}
         onSeek={(ratio) => audioEngine.seek(ratio)}
         onVolume={(v) => {
           setVolume(v);
           audioEngine.setVolume(v);
         }}
-        onMoodFilter={setMoodFilter}
       />
 
       <motion.section
@@ -408,8 +460,10 @@ function App() {
       >
       <Library
         tracks={filteredTracks}
+        allTags={allTags}
         currentTrackId={currentTrackId}
         searchText={searchText}
+        tagFilter={moodFilter}
         queuePrompt={queuePrompt}
         queueActive={!!queueOverride}
         selectedIds={selectedIds}
@@ -424,6 +478,10 @@ function App() {
         onSelectAll={handleSelectAll}
         onClearSelection={() => setSelectedIds(new Set())}
         onTagTracks={handleTagTracks}
+        onCreateTag={handleCreateTag}
+        onDeleteTag={handleDeleteTag}
+        onTagFilter={setMoodFilter}
+        onToggleLike={handleToggleLike}
       />
       </motion.div>
 

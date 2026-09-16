@@ -1,11 +1,13 @@
-import { MOODS } from "../../constants/moods";
 import type { Track } from "../../types";
+import { TagChips } from "../Tags/TagChips";
 import { VirtualizedTrackTable } from "./VirtualizedTrackTable";
 
 interface LibraryProps {
   tracks: Track[];
+  allTags: string[];
   currentTrackId: string | null;
   searchText: string;
+  tagFilter: string | null;
   queuePrompt?: string | null;
   queueActive?: boolean;
   selectedIds: Set<string>;
@@ -18,12 +20,18 @@ interface LibraryProps {
   onSelectAll: (checked: boolean) => void;
   onClearSelection: () => void;
   onTagTracks: (trackIds: string[], mood: string) => void;
+  onCreateTag: (tag: string) => void;
+  onDeleteTag: (tag: string) => void;
+  onTagFilter: (tag: string | null) => void;
+  onToggleLike: (trackId: string) => void;
 }
 
 export function Library({
   tracks,
+  allTags,
   currentTrackId,
   searchText,
+  tagFilter,
   queuePrompt,
   queueActive,
   selectedIds,
@@ -36,6 +44,10 @@ export function Library({
   onSelectAll,
   onClearSelection,
   onTagTracks,
+  onCreateTag,
+  onDeleteTag,
+  onTagFilter,
+  onToggleLike,
 }: LibraryProps) {
   const selectionCount = selectedIds.size;
 
@@ -77,36 +89,36 @@ export function Library({
       </div>
 
       <p className="library-hint">
-        Click a <strong>mood pill</strong> to tag one track. Check rows to tag
-        many. For automatic keyword tagging, use <strong>Auto-tag library</strong>{" "}
-        in Settings.
+        Click a <strong>tag pill</strong> on a track to tag it. Use <strong>+</strong>{" "}
+        to create a tag (applies to selected rows, or the playing track). Hover a
+        filter tag and click <strong>×</strong> to remove it from all tracks.
+        For bulk keyword tagging, use <strong>Auto-tag library</strong> in Settings.
       </p>
+
+      <TagChips
+        tags={allTags}
+        activeTag={tagFilter}
+        onSelect={onTagFilter}
+        onDeleteTag={onDeleteTag}
+        onCreateTag={onCreateTag}
+      />
 
       {selectionCount > 0 && (
         <div className="tag-toolbar">
           <span className="tag-toolbar-count">
-            {selectionCount} selected — tag as:
+            {selectionCount} selected — quick tag:
           </span>
           <div className="tag-toolbar-moods">
-            {MOODS.map((mood) => (
+            {allTags.map((tag) => (
               <button
-                key={mood}
+                key={tag}
                 type="button"
-                className="mood-chip compact"
-                data-mood={mood}
-                onClick={() => onTagTracks(Array.from(selectedIds), mood)}
+                className="tag-chip compact"
+                onClick={() => onTagTracks(Array.from(selectedIds), tag)}
               >
-                {mood}
+                {tag}
               </button>
             ))}
-            <button
-              type="button"
-              className="mood-chip compact"
-              data-mood="Unsorted"
-              onClick={() => onTagTracks(Array.from(selectedIds), "Unsorted")}
-            >
-              Unsorted
-            </button>
           </div>
           <button type="button" className="file-btn" onClick={onClearSelection}>
             Clear
@@ -117,12 +129,14 @@ export function Library({
       {tracks.length > 0 ? (
         <VirtualizedTrackTable
           tracks={tracks}
+          allTags={allTags}
           currentTrackId={currentTrackId}
           selectedIds={selectedIds}
           onPlay={onPlay}
           onToggleSelect={onToggleSelect}
           onSelectAll={onSelectAll}
           onTagTracks={onTagTracks}
+          onToggleLike={onToggleLike}
         />
       ) : (
         <div className="empty-state">

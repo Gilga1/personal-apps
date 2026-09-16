@@ -14,6 +14,7 @@ export interface Track {
   mood_source: string;
   energy_score?: number | null;
   situational_tags: string[];
+  liked: boolean;
 }
 
 export type LlmProvider = "ollama" | "openai" | "openrouter" | "gemini";

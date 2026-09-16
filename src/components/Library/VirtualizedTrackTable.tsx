@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Track } from "../../types";
-import { MoodPicker } from "./MoodPicker";
+import { TagPicker } from "./TagPicker";
 import { TrackCheckbox } from "./TrackCheckbox";
 
 const ROW_HEIGHT = 42;
@@ -13,24 +13,42 @@ function fmtTime(seconds: number | null | undefined) {
   return `${m}:${s < 10 ? "0" : ""}${s}`;
 }
 
+function displayTag(track: Track): string {
+  if (track.mood && track.mood !== "Unsorted") return track.mood;
+  if (track.situational_tags.length > 0) return track.situational_tags[0];
+  return "Unsorted";
+}
+
+function tagTitle(track: Track): string {
+  const tags = [
+    ...(track.mood !== "Unsorted" ? [track.mood] : []),
+    ...track.situational_tags.filter((t) => t !== track.mood),
+  ];
+  return tags.length ? tags.join(", ") : "Unsorted";
+}
+
 interface VirtualizedTrackTableProps {
   tracks: Track[];
+  allTags: string[];
   currentTrackId: string | null;
   selectedIds: Set<string>;
   onPlay: (trackId: string) => void;
   onToggleSelect: (trackId: string, extendRange?: boolean) => void;
   onSelectAll: (checked: boolean) => void;
   onTagTracks: (trackIds: string[], mood: string) => void;
+  onToggleLike: (trackId: string) => void;
 }
 
 export function VirtualizedTrackTable({
   tracks,
+  allTags,
   currentTrackId,
   selectedIds,
   onPlay,
   onToggleSelect,
   onSelectAll,
   onTagTracks,
+  onToggleLike,
 }: VirtualizedTrackTableProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [scrollTop, setScrollTop] = useState(0);
@@ -88,11 +106,12 @@ export function VirtualizedTrackTable({
                     onToggle={() => onSelectAll(!allSelected)}
                   />
                 </th>
+                <th className="col-like" />
                 <th className="col-eq" />
                 <th className="col-title">Title</th>
                 <th className="col-artist">Artist</th>
                 <th className="col-album">Album</th>
-                <th className="col-mood">Mood</th>
+                <th className="col-mood">Tag</th>
                 <th className="col-time">Time</th>
               </tr>
             </thead>
@@ -116,6 +135,16 @@ export function VirtualizedTrackTable({
                       onToggle={(shiftKey) => onToggleSelect(track.id, shiftKey)}
                     />
                   </td>
+                  <td className="col-like" onClick={(e) => e.stopPropagation()}>
+                    <button
+                      type="button"
+                      className={`like-cell-btn ${track.liked ? "active" : ""}`}
+                      title={track.liked ? "Unlike" : "Like"}
+                      onClick={() => onToggleLike(track.id)}
+                    >
+                      {track.liked ? "♥" : "♡"}
+                    </button>
+                  </td>
                   <td className="col-eq"><span className="eq">♪</span></td>
                   <td className="col-title title-cell">
                     <span className="t">{track.title}</span>
@@ -125,8 +154,8 @@ export function VirtualizedTrackTable({
                   <td className="col-mood">
                     <span
                       className="mood-pill"
-                      data-mood={track.mood}
-                      title="Click to tag"
+                      data-mood={displayTag(track)}
+                      title={`${tagTitle(track)} — click to tag`}
                       onClick={(e) => {
                         e.stopPropagation();
                         const ids = selectedIds.has(track.id)
@@ -135,7 +164,7 @@ export function VirtualizedTrackTable({
                         openPicker(ids, e.currentTarget);
                       }}
                     >
-                      {track.mood}
+                      {displayTag(track)}
                     </span>
                   </td>
                   <td className="col-time muted">{fmtTime(track.duration_sec)}</td>
@@ -146,11 +175,12 @@ export function VirtualizedTrackTable({
         </div>
       </div>
 
-      <MoodPicker
+      <TagPicker
         anchorRect={pickerAnchor}
+        tags={allTags}
         onClose={closePicker}
-        onSelect={(mood) => {
-          onTagTracks(pickerTrackIds, mood);
+        onSelect={(tag) => {
+          onTagTracks(pickerTrackIds, tag);
           closePicker();
         }}
       />

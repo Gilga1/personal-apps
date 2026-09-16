@@ -42,6 +42,21 @@ pub async fn get_tracks(state: State<'_, AppState>) -> Result<Vec<Track>, String
 }
 
 #[tauri::command]
+pub fn get_distinct_tags(state: State<'_, AppState>) -> Result<Vec<String>, String> {
+    state.db.get_distinct_tags()
+}
+
+#[tauri::command]
+pub fn delete_tag(tag: String, state: State<'_, AppState>) -> Result<u32, String> {
+    state.db.delete_tag_globally(&tag)
+}
+
+#[tauri::command]
+pub fn toggle_track_like(track_id: String, state: State<'_, AppState>) -> Result<bool, String> {
+    state.db.toggle_track_like(&track_id)
+}
+
+#[tauri::command]
 pub fn set_tracks_mood(
     track_ids: Vec<String>,
     mood: String,
