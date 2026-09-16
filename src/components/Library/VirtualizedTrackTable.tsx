@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Track } from "../../types";
+import { TagPicker } from "./TagPicker";
+import { TrackCheckbox } from "./TrackCheckbox";
 
 const ROW_HEIGHT = 42;
 const BUFFER = 6;
@@ -11,22 +13,48 @@ function fmtTime(seconds: number | null | undefined) {
   return `${m}:${s < 10 ? "0" : ""}${s}`;
 }
 
+function displayTag(track: Track): string {
+  if (track.mood && track.mood !== "Unsorted") return track.mood;
+  if (track.situational_tags.length > 0) return track.situational_tags[0];
+  return "Unsorted";
+}
+
+function tagTitle(track: Track): string {
+  const tags = [
+    ...(track.mood !== "Unsorted" ? [track.mood] : []),
+    ...track.situational_tags.filter((t) => t !== track.mood),
+  ];
+  return tags.length ? tags.join(", ") : "Unsorted";
+}
+
 interface VirtualizedTrackTableProps {
   tracks: Track[];
+  allTags: string[];
   currentTrackId: string | null;
+  selectedIds: Set<string>;
   onPlay: (trackId: string) => void;
-  onMoodClick: (trackId: string) => void;
+  onToggleSelect: (trackId: string, extendRange?: boolean) => void;
+  onSelectAll: (checked: boolean) => void;
+  onTagTracks: (trackIds: string[], mood: string) => void;
+  onToggleLike: (trackId: string) => void;
 }
 
 export function VirtualizedTrackTable({
   tracks,
+  allTags,
   currentTrackId,
+  selectedIds,
   onPlay,
-  onMoodClick,
+  onToggleSelect,
+  onSelectAll,
+  onTagTracks,
+  onToggleLike,
 }: VirtualizedTrackTableProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [scrollTop, setScrollTop] = useState(0);
   const [containerHeight, setContainerHeight] = useState(420);
+  const [pickerAnchor, setPickerAnchor] = useState<DOMRect | null>(null);
+  const [pickerTrackIds, setPickerTrackIds] = useState<string[]>([]);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -42,64 +70,120 @@ export function VirtualizedTrackTable({
     }
   }, []);
 
+  const openPicker = (trackIds: string[], target: HTMLElement) => {
+    setPickerTrackIds(trackIds);
+    setPickerAnchor(target.getBoundingClientRect());
+  };
+
+  const closePicker = () => {
+    setPickerAnchor(null);
+    setPickerTrackIds([]);
+  };
+
+  const allSelected = tracks.length > 0 && tracks.every((t) => selectedIds.has(t.id));
+
   const totalHeight = tracks.length * ROW_HEIGHT;
   const startIdx = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - BUFFER);
-  const visibleCount =
-    Math.ceil(containerHeight / ROW_HEIGHT) + BUFFER * 2;
+  const visibleCount = Math.ceil(containerHeight / ROW_HEIGHT) + BUFFER * 2;
   const endIdx = Math.min(tracks.length, startIdx + visibleCount);
   const offsetY = startIdx * ROW_HEIGHT;
   const visible = tracks.slice(startIdx, endIdx);
 
   return (
-    <div
-      ref={containerRef}
-      className="virt-scroll"
-      onScroll={onScroll}
-    >
-      <div className="virt-inner" style={{ height: totalHeight }}>
-        <table className="virt-table" style={{ transform: `translateY(${offsetY}px)` }}>
-          <thead>
-            <tr>
-              <th style={{ width: 36 }} />
-              <th>Title</th>
-              <th>Artist</th>
-              <th>Album</th>
-              <th>Mood</th>
-              <th style={{ width: 60 }}>Time</th>
-            </tr>
-          </thead>
-          <tbody>
-            {visible.map((track) => (
-              <tr
-                key={track.id}
-                className={track.id === currentTrackId ? "playing-row" : ""}
-                style={{ height: ROW_HEIGHT }}
-                onClick={() => onPlay(track.id)}
-              >
-                <td><span className="eq">♪</span></td>
-                <td className="title-cell">
-                  <span className="t">{track.title}</span>
-                </td>
-                <td className="muted">{track.artist}</td>
-                <td className="muted">{track.album}</td>
-                <td>
-                  <span
-                    className="mood-pill"
-                    data-mood={track.mood}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onMoodClick(track.id);
-                    }}
-                  >
-                    {track.mood}
-                  </span>
-                </td>
-                <td className="muted">{fmtTime(track.duration_sec)}</td>
+    <>
+      <div ref={containerRef} className="virt-scroll" onScroll={onScroll}>
+        <div className="virt-inner" style={{ height: totalHeight }}>
+          <table
+            className="virt-table track-table"
+            style={{ transform: `translateY(${offsetY}px)` }}
+          >
+            <thead>
+              <tr>
+                <th className="col-check">
+                  <TrackCheckbox
+                    checked={allSelected}
+                    label="Select all tracks"
+                    onToggle={() => onSelectAll(!allSelected)}
+                  />
+                </th>
+                <th className="col-like" />
+                <th className="col-eq" />
+                <th className="col-title">Title</th>
+                <th className="col-artist">Artist</th>
+                <th className="col-album">Album</th>
+                <th className="col-mood">Tag</th>
+                <th className="col-time">Time</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {visible.map((track) => (
+                <tr
+                  key={track.id}
+                  className={[
+                    track.id === currentTrackId ? "playing-row" : "",
+                    selectedIds.has(track.id) ? "selected-row" : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
+                  style={{ height: ROW_HEIGHT }}
+                  onClick={() => onPlay(track.id)}
+                >
+                  <td className="col-check" onClick={(e) => e.stopPropagation()}>
+                    <TrackCheckbox
+                      checked={selectedIds.has(track.id)}
+                      label={`Select ${track.title}`}
+                      onToggle={(shiftKey) => onToggleSelect(track.id, shiftKey)}
+                    />
+                  </td>
+                  <td className="col-like" onClick={(e) => e.stopPropagation()}>
+                    <button
+                      type="button"
+                      className={`like-cell-btn ${track.liked ? "active" : ""}`}
+                      title={track.liked ? "Unlike" : "Like"}
+                      onClick={() => onToggleLike(track.id)}
+                    >
+                      {track.liked ? "♥" : "♡"}
+                    </button>
+                  </td>
+                  <td className="col-eq"><span className="eq">♪</span></td>
+                  <td className="col-title title-cell">
+                    <span className="t">{track.title}</span>
+                  </td>
+                  <td className="col-artist muted">{track.artist}</td>
+                  <td className="col-album muted">{track.album}</td>
+                  <td className="col-mood">
+                    <span
+                      className="mood-pill"
+                      data-mood={displayTag(track)}
+                      title={`${tagTitle(track)} — click to tag`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const ids = selectedIds.has(track.id)
+                          ? Array.from(selectedIds)
+                          : [track.id];
+                        openPicker(ids, e.currentTarget);
+                      }}
+                    >
+                      {displayTag(track)}
+                    </span>
+                  </td>
+                  <td className="col-time muted">{fmtTime(track.duration_sec)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
-    </div>
+
+      <TagPicker
+        anchorRect={pickerAnchor}
+        tags={allTags}
+        onClose={closePicker}
+        onSelect={(tag) => {
+          onTagTracks(pickerTrackIds, tag);
+          closePicker();
+        }}
+      />
+    </>
   );
 }

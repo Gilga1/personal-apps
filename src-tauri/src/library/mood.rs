@@ -210,7 +210,11 @@ pub fn map_llm_mood(raw: &str) -> String {
     if MOOD_CYCLE.iter().any(|m| *m == raw) {
         return raw.to_string();
     }
-    "Unsorted".to_string()
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return "Unsorted".to_string();
+    }
+    trimmed.to_string()
 }
 
 pub const MOOD_CYCLE: [&str; 5] = [

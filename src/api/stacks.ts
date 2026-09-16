@@ -56,6 +56,44 @@ export async function getTracks(): Promise<Track[]> {
   return invokeTauri<Track[]>("get_tracks");
 }
 
+export async function deleteTag(tag: string): Promise<number> {
+  if (isWebMode()) {
+    const data = await api<{ count: number }>(`/api/tags/${encodeURIComponent(tag)}`, {
+      method: "DELETE",
+    });
+    return data.count;
+  }
+  return invokeTauri<number>("delete_tag", { tag });
+}
+
+export async function toggleTrackLike(trackId: string): Promise<boolean> {
+  if (isWebMode()) {
+    const data = await api<{ liked: boolean }>(`/api/tracks/${trackId}/like`, {
+      method: "POST",
+    });
+    return data.liked;
+  }
+  return invokeTauri<boolean>("toggle_track_like", { trackId });
+}
+
+export async function setTracksMood(
+  trackIds: string[],
+  mood: string,
+): Promise<number> {
+  if (isWebMode()) {
+    let count = 0;
+    for (const trackId of trackIds) {
+      await api<{ mood: string }>(`/api/mood/${trackId}`, {
+        method: "POST",
+        body: JSON.stringify({ mood }),
+      });
+      count += 1;
+    }
+    return count;
+  }
+  return invokeTauri<number>("set_tracks_mood", { trackIds, mood });
+}
+
 export async function setTrackMood(
   trackId: string,
   mood?: string,
@@ -149,6 +187,14 @@ export async function ingestYoutube(
 export async function getIngestJobs(): Promise<IngestJob[]> {
   if (isWebMode()) return api<IngestJob[]>("/api/ingest");
   return invokeTauri<IngestJob[]>("get_ingest_jobs");
+}
+
+export async function cancelIngest(jobId: string): Promise<void> {
+  if (isWebMode()) {
+    await api(`/api/ingest/${jobId}/cancel`, { method: "POST" });
+    return;
+  }
+  await invokeTauri("cancel_ingest", { jobId });
 }
 
 export async function checkYtdlpAvailable(): Promise<boolean> {

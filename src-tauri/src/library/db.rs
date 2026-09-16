@@ -23,6 +23,7 @@ pub struct Track {
     pub mood_source: String,
     pub energy_score: Option<i32>,
     pub situational_tags: Vec<String>,
+    pub liked: bool,
 }
 
 pub struct Database {
@@ -101,6 +102,32 @@ impl Database {
             ",
         )
         .map_err(|e| e.to_string())?;
+        Self::ensure_column(
+            &conn,
+            "tracks",
+            "liked",
+            "ALTER TABLE tracks ADD COLUMN liked INTEGER NOT NULL DEFAULT 0",
+        )?;
+        Ok(())
+    }
+
+    fn ensure_column(
+        conn: &Connection,
+        table: &str,
+        column: &str,
+        ddl: &str,
+    ) -> Result<(), String> {
+        let mut stmt = conn
+            .prepare(&format!("PRAGMA table_info({table})"))
+            .map_err(|e| e.to_string())?;
+        let exists = stmt
+            .query_map([], |row| row.get::<_, String>(1))
+            .map_err(|e| e.to_string())?
+            .filter_map(|r| r.ok())
+            .any(|name| name == column);
+        if !exists {
+            conn.execute(ddl, []).map_err(|e| e.to_string())?;
+        }
         Ok(())
     }
 
@@ -191,7 +218,8 @@ impl Database {
             .prepare(
                 "SELECT t.id, t.file_path, t.title, t.artist, t.album, t.year, t.genre,
                         t.duration_sec, t.format, t.tag_source, t.folder_path,
-                        COALESCE(m.mood, 'Unsorted'), COALESCE(m.source, 'rule_engine'), m.energy_score
+                        COALESCE(m.mood, 'Unsorted'), COALESCE(m.source, 'rule_engine'), m.energy_score,
+                        COALESCE(t.liked, 0)
                  FROM tracks t
                  LEFT JOIN track_moods m ON m.track_id = t.id
                  ORDER BY t.artist COLLATE NOCASE, t.album COLLATE NOCASE, t.title COLLATE NOCASE",
@@ -215,6 +243,7 @@ impl Database {
                     row.get::<_, String>(11)?,
                     row.get::<_, String>(12)?,
                     row.get::<_, Option<i32>>(13)?,
+                    row.get::<_, i32>(14)?,
                 ))
             })
             .map_err(|e| e.to_string())?;
@@ -250,6 +279,7 @@ impl Database {
                 mood,
                 mood_source,
                 energy_score,
+                liked,
             ) = row.map_err(|e| e.to_string())?;
 
             let situational_tags = tags_by_track.remove(&id).unwrap_or_default();
@@ -270,9 +300,100 @@ impl Database {
                 mood_source,
                 energy_score,
                 situational_tags,
+                liked: liked != 0,
             });
         }
         Ok(tracks)
+    }
+
+    pub fn get_distinct_tags(&self) -> Result<Vec<String>, String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let mut tags: Vec<String> = Vec::new();
+        let mut mood_stmt = conn
+            .prepare(
+                "SELECT DISTINCT mood FROM track_moods
+                 WHERE mood IS NOT NULL AND mood != 'Unsorted'",
+            )
+            .map_err(|e| e.to_string())?;
+        for row in mood_stmt
+            .query_map([], |row| row.get::<_, String>(0))
+            .map_err(|e| e.to_string())?
+        {
+            if let Ok(tag) = row {
+                tags.push(tag);
+            }
+        }
+        let mut sit_stmt = conn
+            .prepare("SELECT DISTINCT tag FROM situational_tags WHERE tag IS NOT NULL")
+            .map_err(|e| e.to_string())?;
+        for row in sit_stmt
+            .query_map([], |row| row.get::<_, String>(0))
+            .map_err(|e| e.to_string())?
+        {
+            if let Ok(tag) = row {
+                tags.push(tag);
+            }
+        }
+        tags.sort_by(|a, b| a.to_lowercase().cmp(&b.to_lowercase()));
+        tags.dedup();
+        Ok(tags)
+    }
+
+    pub fn delete_tag_globally(&self, tag: &str) -> Result<u32, String> {
+        if tag == "Unsorted" {
+            return Ok(0);
+        }
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let mut stmt = conn
+            .prepare("SELECT track_id FROM track_moods WHERE mood = ?1")
+            .map_err(|e| e.to_string())?;
+        let ids = stmt
+            .query_map(params![tag], |row| row.get::<_, String>(0))
+            .map_err(|e| e.to_string())?
+            .filter_map(|r| r.ok())
+            .collect::<Vec<_>>();
+
+        let mut count = ids.len() as u32;
+        for track_id in &ids {
+            conn.execute(
+                "DELETE FROM track_moods WHERE track_id = ?1",
+                params![track_id],
+            )
+            .map_err(|e| e.to_string())?;
+            conn.execute(
+                "INSERT INTO track_moods (track_id, mood, source, energy_score) VALUES (?1, 'Unsorted', 'manual_override', NULL)",
+                params![track_id],
+            )
+            .map_err(|e| e.to_string())?;
+        }
+
+        let situational = conn
+            .execute(
+                "DELETE FROM situational_tags WHERE tag = ?1",
+                params![tag],
+            )
+            .map_err(|e| e.to_string())?;
+        count += situational as u32;
+
+        Ok(count)
+    }
+
+    pub fn toggle_track_like(&self, track_id: &str) -> Result<bool, String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let liked: i32 = conn
+            .query_row(
+                "SELECT COALESCE(liked, 0) FROM tracks WHERE id = ?1",
+                params![track_id],
+                |row| row.get(0),
+            )
+            .map_err(|e| e.to_string())?;
+        let next = if liked != 0 { 0 } else { 1 };
+        conn.execute(
+            "UPDATE tracks SET liked = ?2 WHERE id = ?1",
+            params![track_id, next],
+        )
+        .map_err(|e| e.to_string())?;
+        Ok(next != 0)
     }
 
     pub fn set_track_mood(&self, track_id: &str, mood: &str) -> Result<(), String> {

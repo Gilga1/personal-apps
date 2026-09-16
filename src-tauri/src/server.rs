@@ -57,6 +57,7 @@ pub async fn run_server() {
         db: Arc::new(db),
         data_dir,
         music_dir: music_dir.clone(),
+        ingest_registry: Arc::new(ingest::IngestJobRegistry::default()),
     };
 
     if let Ok(tracks) = state.db.get_all_tracks() {
@@ -76,6 +77,8 @@ pub async fn run_server() {
         .route("/api/tracks", get(get_tracks))
         .route("/api/scan", post(scan_library))
         .route("/api/mood/{track_id}", post(set_mood))
+        .route("/api/tags/{tag}", axum::routing::delete(delete_tag))
+        .route("/api/tracks/{track_id}/like", post(toggle_like))
         .route("/api/llm/config", get(get_llm).post(set_llm))
         .route("/api/llm/test", post(test_llm))
         .route("/api/llm/providers", get(list_providers))
@@ -111,6 +114,7 @@ struct AppState {
     db: Arc<Database>,
     data_dir: PathBuf,
     music_dir: PathBuf,
+    ingest_registry: Arc<ingest::IngestJobRegistry>,
 }
 
 #[cfg(feature = "server")]
@@ -142,6 +146,24 @@ async fn scan_library(
 #[derive(Deserialize)]
 struct MoodBody {
     mood: Option<String>,
+}
+
+#[cfg(feature = "server")]
+async fn delete_tag(
+    State(state): State<AppState>,
+    Path(tag): Path<String>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let count = state.db.delete_tag_globally(&tag)?;
+    Ok(Json(serde_json::json!({ "count": count })))
+}
+
+#[cfg(feature = "server")]
+async fn toggle_like(
+    State(state): State<AppState>,
+    Path(track_id): Path<String>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let liked = state.db.toggle_track_like(&track_id)?;
+    Ok(Json(serde_json::json!({ "liked": liked })))
 }
 
 #[cfg(feature = "server")]
@@ -330,10 +352,11 @@ async fn ingest_youtube(
     let job_id = ingest::create_job(&state.db, &body.url)?;
     let db = state.db.clone();
     let data_dir = state.data_dir.clone();
+    let registry = state.ingest_registry.clone();
     let job_id_spawn = job_id.clone();
     let url = body.url;
     tokio::spawn(async move {
-        ingest::run_youtube_ingest(db, data_dir, job_id_spawn, url, None, None).await;
+        ingest::run_youtube_ingest(db, data_dir, registry, job_id_spawn, url, None, None).await;
     });
     Ok(Json(serde_json::json!({ "job_id": job_id })))
 }

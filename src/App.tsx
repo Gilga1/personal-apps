@@ -2,11 +2,13 @@ import { motion } from "framer-motion";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   buildPlaylistQueue,
+  deleteTag,
   getTracks,
   getUseLlmRerank,
   pickLibraryFolder,
   scanLibrary,
-  setTrackMood,
+  setTracksMood,
+  toggleTrackLike,
 } from "./api/stacks";
 import { audioEngine } from "./audio/AudioEngine";
 import { CommandBar } from "./components/CommandBar/CommandBar";
@@ -57,6 +59,8 @@ function App() {
   const [duration, setDuration] = useState(0);
   const [queuePrompt, setQueuePrompt] = useState<string | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [selectionAnchorId, setSelectionAnchorId] = useState<string | null>(null);
 
   const refreshTracks = useCallback(async () => {
     try {
@@ -89,7 +93,10 @@ function App() {
       return pool;
     }
     if (moodFilter) {
-      pool = pool.filter((t) => t.mood === moodFilter);
+      pool = pool.filter(
+        (t) =>
+          t.mood === moodFilter || t.situational_tags.includes(moodFilter),
+      );
     }
     if (searchText) {
       const q = searchText.toLowerCase();
@@ -107,7 +114,12 @@ function App() {
         .filter(Boolean) as typeof tracks;
     }
     let pool = tracks;
-    if (moodFilter) pool = pool.filter((t) => t.mood === moodFilter);
+    if (moodFilter) {
+      pool = pool.filter(
+        (t) =>
+          t.mood === moodFilter || t.situational_tags.includes(moodFilter),
+      );
+    }
     if (searchText) {
       const q = searchText.toLowerCase();
       pool = pool.filter((t) =>
@@ -223,10 +235,95 @@ function App() {
     }
   };
 
-  const handleMoodClick = async (trackId: string) => {
-    const mood = await setTrackMood(trackId);
-    const track = tracks.find((t) => t.id === trackId);
-    if (track) updateTrack({ ...track, mood, mood_source: "manual_override" });
+  const handleToggleSelect = useCallback(
+    (trackId: string, extendRange?: boolean) => {
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        if (extendRange && selectionAnchorId) {
+          const ids = filteredTracks.map((t) => t.id);
+          const a = ids.indexOf(selectionAnchorId);
+          const b = ids.indexOf(trackId);
+          if (a >= 0 && b >= 0) {
+            const [start, end] = a < b ? [a, b] : [b, a];
+            for (let i = start; i <= end; i += 1) {
+              next.add(ids[i]);
+            }
+            return next;
+          }
+        }
+        if (next.has(trackId)) next.delete(trackId);
+        else next.add(trackId);
+        return next;
+      });
+      setSelectionAnchorId(trackId);
+    },
+    [filteredTracks, selectionAnchorId],
+  );
+
+  const handleSelectAll = useCallback(
+    (checked: boolean) => {
+      if (checked) {
+        setSelectedIds(new Set(filteredTracks.map((t) => t.id)));
+      } else {
+        setSelectedIds(new Set());
+      }
+    },
+    [filteredTracks],
+  );
+
+  const allTags = useMemo(() => {
+    const set = new Set<string>();
+    for (const t of tracks) {
+      if (t.mood && t.mood !== "Unsorted") set.add(t.mood);
+      for (const tag of t.situational_tags) set.add(tag);
+    }
+    return [...set].sort((a, b) => a.localeCompare(b));
+  }, [tracks]);
+
+  const handleTagTracks = async (trackIds: string[], mood: string) => {
+    if (!trackIds.length) return;
+    await setTracksMood(trackIds, mood);
+    for (const id of trackIds) {
+      const track = tracks.find((t) => t.id === id);
+      if (track) {
+        updateTrack({ ...track, mood, mood_source: "manual_override" });
+      }
+    }
+    setSelectedIds(new Set());
+  };
+
+  const handleCreateTag = async (tag: string) => {
+    const trimmed = tag.trim();
+    if (!trimmed || trimmed === "Unsorted") return;
+    const ids =
+      selectedIds.size > 0
+        ? Array.from(selectedIds)
+        : currentTrackId
+          ? [currentTrackId]
+          : [];
+    if (!ids.length) {
+      const toastId = push(
+        "Select tracks in the library, or play one, then press + to tag.",
+        "error",
+      );
+      setTimeout(() => dismiss(toastId), 4000);
+      return;
+    }
+    await handleTagTracks(ids, trimmed);
+  };
+
+  const handleDeleteTag = async (tag: string) => {
+    await deleteTag(tag);
+    if (moodFilter === tag) setMoodFilter(null);
+    await refreshTracks();
+  };
+
+  const handleToggleLike = async (trackId?: string) => {
+    const id = trackId ?? currentTrackId;
+    if (!id) return;
+    const liked = await toggleTrackLike(id);
+    const track = tracks.find((t) => t.id === id);
+    if (track) updateTrack({ ...track, liked });
   };
 
   const resetQueue = useCallback(() => {
@@ -319,18 +416,17 @@ function App() {
         currentTime={currentTime}
         duration={duration}
         volume={volume}
-        moodFilter={moodFilter}
         onPlayPause={togglePlayPause}
         onPrev={() => step(-1)}
         onNext={() => step(1)}
         onShuffle={toggleShuffle}
         onCrossfade={toggleCrossfade}
+        onToggleLike={handleToggleLike}
         onSeek={(ratio) => audioEngine.seek(ratio)}
         onVolume={(v) => {
           setVolume(v);
           audioEngine.setVolume(v);
         }}
-        onMoodFilter={setMoodFilter}
       />
 
       <motion.section
@@ -364,10 +460,13 @@ function App() {
       >
       <Library
         tracks={filteredTracks}
+        allTags={allTags}
         currentTrackId={currentTrackId}
         searchText={searchText}
+        tagFilter={moodFilter}
         queuePrompt={queuePrompt}
         queueActive={!!queueOverride}
+        selectedIds={selectedIds}
         onSearch={setSearchText}
         onPickFolder={pickFolder}
         onOpenSettings={() => setSettingsOpen(true)}
@@ -375,7 +474,14 @@ function App() {
         onPlay={(id) => {
           playTrack(id);
         }}
-        onMoodClick={handleMoodClick}
+        onToggleSelect={handleToggleSelect}
+        onSelectAll={handleSelectAll}
+        onClearSelection={() => setSelectedIds(new Set())}
+        onTagTracks={handleTagTracks}
+        onCreateTag={handleCreateTag}
+        onDeleteTag={handleDeleteTag}
+        onTagFilter={setMoodFilter}
+        onToggleLike={handleToggleLike}
       />
       </motion.div>
 

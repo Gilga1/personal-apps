@@ -13,6 +13,7 @@ use tauri::{AppHandle, Emitter, State};
 pub struct AppState {
     pub db: Arc<Database>,
     pub data_dir: PathBuf,
+    pub ingest_registry: Arc<ingest::IngestJobRegistry>,
 }
 
 #[tauri::command]
@@ -38,6 +39,35 @@ pub async fn scan_library(path: String, state: State<'_, AppState>) -> Result<u3
 #[tauri::command]
 pub async fn get_tracks(state: State<'_, AppState>) -> Result<Vec<Track>, String> {
     state.db.get_all_tracks()
+}
+
+#[tauri::command]
+pub fn get_distinct_tags(state: State<'_, AppState>) -> Result<Vec<String>, String> {
+    state.db.get_distinct_tags()
+}
+
+#[tauri::command]
+pub fn delete_tag(tag: String, state: State<'_, AppState>) -> Result<u32, String> {
+    state.db.delete_tag_globally(&tag)
+}
+
+#[tauri::command]
+pub fn toggle_track_like(track_id: String, state: State<'_, AppState>) -> Result<bool, String> {
+    state.db.toggle_track_like(&track_id)
+}
+
+#[tauri::command]
+pub fn set_tracks_mood(
+    track_ids: Vec<String>,
+    mood: String,
+    state: State<'_, AppState>,
+) -> Result<u32, String> {
+    let mut count = 0u32;
+    for track_id in track_ids {
+        state.db.set_track_mood(&track_id, &mood)?;
+        count += 1;
+    }
+    Ok(count)
 }
 
 #[tauri::command]
@@ -197,6 +227,7 @@ pub async fn ingest_youtube(
     let job_id = ingest::create_job(&state.db, &url)?;
     let db = state.db.clone();
     let data_dir = state.data_dir.clone();
+    let registry = state.ingest_registry.clone();
     let job_id_spawn = job_id.clone();
     let on_progress: ingest::ProgressCallback = std::sync::Arc::new(move |ev| {
         let _ = app.emit("ingest-progress", &ev);
@@ -205,6 +236,7 @@ pub async fn ingest_youtube(
         ingest::run_youtube_ingest(
             db,
             data_dir,
+            registry,
             job_id_spawn,
             url,
             playlist_name,
@@ -213,6 +245,35 @@ pub async fn ingest_youtube(
         .await;
     });
     Ok(job_id)
+}
+
+#[tauri::command]
+pub fn cancel_ingest(
+    job_id: String,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    state.ingest_registry.cancel(&job_id);
+    let _ = state.db.update_ingest_job(
+        &job_id,
+        "cancelled",
+        None,
+        Some("Import cancelled"),
+        Some(0.0),
+    );
+    let _ = app.emit(
+        "ingest-progress",
+        ingest::IngestProgressEvent {
+            job_id,
+            status: "cancelled".to_string(),
+            progress: 0.0,
+            message: "Import cancelled".to_string(),
+            track_id: None,
+            track_ids: vec![],
+            playlist_id: None,
+        },
+    );
+    Ok(())
 }
 
 #[tauri::command]

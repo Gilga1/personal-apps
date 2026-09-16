@@ -1,6 +1,5 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { Turntable } from "../Turntable/Turntable";
-import { MoodChips } from "../MoodChips/MoodChips";
 import type { Track } from "../../types";
 
 function fmtTime(seconds: number | null | undefined) {
@@ -18,15 +17,14 @@ interface NowPlayingProps {
   currentTime: number;
   duration: number;
   volume: number;
-  moodFilter: string | null;
   onPlayPause: () => void;
   onPrev: () => void;
   onNext: () => void;
   onShuffle: () => void;
   onCrossfade: () => void;
+  onToggleLike: () => void;
   onSeek: (ratio: number) => void;
   onVolume: (volume: number) => void;
-  onMoodFilter: (mood: string | null) => void;
 }
 
 export function NowPlaying({
@@ -37,21 +35,21 @@ export function NowPlaying({
   currentTime,
   duration,
   volume,
-  moodFilter,
   onPlayPause,
   onPrev,
   onNext,
   onShuffle,
   onCrossfade,
+  onToggleLike,
   onSeek,
   onVolume,
-  onMoodFilter,
 }: NowPlayingProps) {
   const label = (track?.album || track?.artist || "STACKS")
     .slice(0, 14)
     .toUpperCase();
 
   const muted = volume === 0;
+  const liked = track?.liked ?? false;
 
   return (
     <motion.section
@@ -92,7 +90,12 @@ export function NowPlaying({
           transition={{ delay: 0.1 }}
         >
           {track?.genre && <span className="tag">{track.genre}</span>}
-          {track?.mood && <span className="tag">{track.mood}</span>}
+          {track?.mood && track.mood !== "Unsorted" && (
+            <span className="tag">{track.mood}</span>
+          )}
+          {track?.situational_tags?.map((t) => (
+            <span key={t} className="tag subtle">{t}</span>
+          ))}
           {track && (
             <span className="tag">
               {track.tag_source === "embedded"
@@ -129,6 +132,16 @@ export function NowPlaying({
               whileTap={{ scale: 0.92 }}
             >
               ⤮
+            </motion.button>
+            <motion.button
+              type="button"
+              className={`like-btn ${liked ? "active" : ""}`}
+              onClick={onToggleLike}
+              title={liked ? "Unlike" : "Like"}
+              disabled={!track}
+              whileTap={{ scale: 0.92 }}
+            >
+              {liked ? "♥" : "♡"}
             </motion.button>
             <motion.button
               type="button"
@@ -188,8 +201,6 @@ export function NowPlaying({
             <span className="vol-label">{Math.round(volume * 100)}%</span>
           </div>
         </div>
-
-        <MoodChips activeMood={moodFilter} onSelect={onMoodFilter} />
       </div>
     </motion.section>
   );
