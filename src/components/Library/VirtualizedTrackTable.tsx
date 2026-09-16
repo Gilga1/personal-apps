@@ -114,9 +114,9 @@ export function VirtualizedTrackTable({
                       type="checkbox"
                       aria-label={`Select ${track.title}`}
                       checked={selectedIds.has(track.id)}
-                      onChange={(e) => {
+                      onClick={(e) => {
                         e.stopPropagation();
-                        onToggleSelect(track.id, e.nativeEvent.shiftKey);
+                        onToggleSelect(track.id, e.shiftKey);
                       }}
                     />
                   </td>
