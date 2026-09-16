@@ -136,7 +136,7 @@ export function NowPlaying({
             <motion.button
               type="button"
               className={`like-btn ${liked ? "active" : ""}`}
-              onClick={onToggleLike}
+              onClick={() => onToggleLike()}
               title={liked ? "Unlike" : "Like"}
               disabled={!track}
               whileTap={{ scale: 0.92 }}

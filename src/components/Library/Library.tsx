@@ -8,6 +8,7 @@ interface LibraryProps {
   currentTrackId: string | null;
   searchText: string;
   tagFilter: string | null;
+  likedOnly: boolean;
   queuePrompt?: string | null;
   queueActive?: boolean;
   selectedIds: Set<string>;
@@ -23,6 +24,7 @@ interface LibraryProps {
   onCreateTag: (tag: string) => void;
   onDeleteTag: (tag: string) => void;
   onTagFilter: (tag: string | null) => void;
+  onLikedOnly: (likedOnly: boolean) => void;
   onToggleLike: (trackId: string) => void;
 }
 
@@ -32,6 +34,7 @@ export function Library({
   currentTrackId,
   searchText,
   tagFilter,
+  likedOnly,
   queuePrompt,
   queueActive,
   selectedIds,
@@ -47,6 +50,7 @@ export function Library({
   onCreateTag,
   onDeleteTag,
   onTagFilter,
+  onLikedOnly,
   onToggleLike,
 }: LibraryProps) {
   const selectionCount = selectedIds.size;
@@ -86,14 +90,14 @@ export function Library({
         <button type="button" className="file-btn" onClick={onOpenSettings}>
           Settings
         </button>
+        <button
+          type="button"
+          className={`file-btn liked-filter-btn ${likedOnly ? "active" : ""}`}
+          onClick={() => onLikedOnly(!likedOnly)}
+        >
+          {likedOnly ? "♥ Liked" : "♡ Liked"}
+        </button>
       </div>
-
-      <p className="library-hint">
-        Click a <strong>tag pill</strong> on a track to tag it. Use <strong>+</strong>{" "}
-        to create a tag (applies to selected rows, or the playing track). Hover a
-        filter tag and click <strong>×</strong> to remove it from all tracks.
-        For bulk keyword tagging, use <strong>Auto-tag library</strong> in Settings.
-      </p>
 
       <TagChips
         tags={allTags}
@@ -140,9 +144,11 @@ export function Library({
         />
       ) : (
         <div className="empty-state">
-          {queueActive
-            ? "No tracks matched this queue. Try different words or reset to browse your full library."
-            : "No tracks yet. Point it at a folder of FLAC/MP3 files — nested composer folders, loose downloads, whatever shape it's already in."}
+          {likedOnly
+            ? "No liked tracks yet. Tap ♡ while a song is playing, or in the library list."
+            : queueActive
+              ? "No tracks matched this queue. Try different words or reset to browse your full library."
+              : "No tracks yet. Point it at a folder of FLAC/MP3 files — nested composer folders, loose downloads, whatever shape it's already in."}
           <div>
             {queueActive && onResetQueue ? (
               <button type="button" className="file-btn" onClick={onResetQueue}>

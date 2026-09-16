@@ -205,10 +205,6 @@ export function IngestPanel({
           Import
         </button>
       </div>
-      <p className="ingest-hint">
-        Mix/Radio links import the current video only. Regular playlists import
-        up to 50 tracks.
-      </p>
       {preparing && (
         <p className="ingest-hint">Setting up YouTube import (one-time)…</p>
       )}

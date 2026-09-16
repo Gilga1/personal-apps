@@ -570,6 +570,12 @@ input[type="range"]::-webkit-slider-thumb {
   cursor: not-allowed;
 }
 
+.liked-filter-btn.active {
+  border-color: #e86a73;
+  color: #e86a73;
+  background: rgba(232, 106, 115, 0.08);
+}
+
 .tag.subtle {
   opacity: 0.75;
   font-size: 11px;

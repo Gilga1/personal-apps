@@ -30,11 +30,13 @@ function App() {
     tracks,
     searchText,
     moodFilter,
+    likedOnly,
     queueOverride,
     loading,
     setTracks,
     setSearchText,
     setMoodFilter,
+    setLikedOnly,
     setQueueOverride,
     setLoading,
     updateTrack,
@@ -92,6 +94,9 @@ function App() {
         .sort((a, b) => (order.get(a.id)! - order.get(b.id)!));
       return pool;
     }
+    if (likedOnly) {
+      pool = pool.filter((t) => t.liked);
+    }
     if (moodFilter) {
       pool = pool.filter(
         (t) =>
@@ -105,7 +110,7 @@ function App() {
       );
     }
     return pool;
-  }, [tracks, moodFilter, searchText, queueOverride]);
+  }, [tracks, moodFilter, likedOnly, searchText, queueOverride]);
 
   const playPool = useMemo(() => {
     if (queueOverride) {
@@ -114,6 +119,9 @@ function App() {
         .filter(Boolean) as typeof tracks;
     }
     let pool = tracks;
+    if (likedOnly) {
+      pool = pool.filter((t) => t.liked);
+    }
     if (moodFilter) {
       pool = pool.filter(
         (t) =>
@@ -127,7 +135,7 @@ function App() {
       );
     }
     return pool;
-  }, [tracks, moodFilter, searchText, queueOverride]);
+  }, [tracks, moodFilter, likedOnly, searchText, queueOverride]);
 
   const playTrack = useCallback(
     async (trackId: string) => {
@@ -319,19 +327,26 @@ function App() {
   };
 
   const handleToggleLike = async (trackId?: string) => {
-    const id = trackId ?? currentTrackId;
+    const id = typeof trackId === "string" ? trackId : currentTrackId;
     if (!id) return;
-    const liked = await toggleTrackLike(id);
     const track = tracks.find((t) => t.id === id);
-    if (track) updateTrack({ ...track, liked });
+    if (!track) return;
+    try {
+      const liked = await toggleTrackLike(id);
+      updateTrack({ ...track, liked });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      push(`Could not update like: ${message}`, "error");
+    }
   };
 
   const resetQueue = useCallback(() => {
     setQueueOverride(null);
     setQueuePrompt(null);
     setMoodFilter(null);
+    setLikedOnly(false);
     setSearchText("");
-  }, [setQueueOverride, setMoodFilter, setSearchText]);
+  }, [setQueueOverride, setMoodFilter, setLikedOnly, setSearchText]);
 
   const handlePlaylistImported = useCallback(
     (ids: string[]) => {
@@ -464,6 +479,7 @@ function App() {
         currentTrackId={currentTrackId}
         searchText={searchText}
         tagFilter={moodFilter}
+        likedOnly={likedOnly}
         queuePrompt={queuePrompt}
         queueActive={!!queueOverride}
         selectedIds={selectedIds}
@@ -481,6 +497,7 @@ function App() {
         onCreateTag={handleCreateTag}
         onDeleteTag={handleDeleteTag}
         onTagFilter={setMoodFilter}
+        onLikedOnly={setLikedOnly}
         onToggleLike={handleToggleLike}
       />
       </motion.div>
