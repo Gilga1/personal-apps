@@ -19,7 +19,11 @@ impl IngestJobRegistry {
         slot
     }
 
-    pub fn store_child(&self, job_id: &str, child: Child) {
+    pub fn store_child(&self, job_id: &str, mut child: Child) {
+        if self.is_cancelled(job_id) {
+            let _ = child.start_kill();
+            return;
+        }
         if let Some(slot) = self.children.lock().unwrap().get(job_id) {
             *slot.lock().unwrap() = Some(child);
         }
@@ -31,11 +35,9 @@ impl IngestJobRegistry {
 
     pub fn cancel(&self, job_id: &str) -> bool {
         self.cancelled.lock().unwrap().insert(job_id.to_string());
-        let child_slot = self.children.lock().unwrap().remove(job_id);
-        if let Some(slot) = child_slot {
+        if let Some(slot) = self.children.lock().unwrap().get(job_id) {
             if let Some(mut child) = slot.lock().unwrap().take() {
                 let _ = child.start_kill();
-                return true;
             }
         }
         true

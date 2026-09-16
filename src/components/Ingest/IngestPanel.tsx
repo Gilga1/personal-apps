@@ -28,6 +28,7 @@ export function IngestPanel({
   const [playlistName, setPlaylistName] = useState("");
   const [jobs, setJobs] = useState<IngestJob[]>([]);
   const [jobProgress, setJobProgress] = useState<Record<string, JobProgress>>({});
+  const [cancellingIds, setCancellingIds] = useState<Set<string>>(new Set());
   const [ytdlpOk, setYtdlpOk] = useState(true);
   const [preparing, setPreparing] = useState(false);
   const onCompleteRef = useRef(onIngestComplete);
@@ -42,6 +43,27 @@ export function IngestPanel({
     ]);
     setYtdlpOk(available);
     setJobs(list);
+  };
+
+  const handleCancel = async (jobId: string) => {
+    setCancellingIds((prev) => new Set(prev).add(jobId));
+    try {
+      await cancelIngest(jobId);
+      setJobProgress((prev) => {
+        const next = { ...prev };
+        delete next[jobId];
+        return next;
+      });
+      await refresh();
+    } catch (e) {
+      alert(String(e));
+    } finally {
+      setCancellingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(jobId);
+        return next;
+      });
+    }
   };
 
   useEffect(() => {
@@ -204,12 +226,21 @@ export function IngestPanel({
               live?.message ??
               (job.status === "queued"
                 ? "Queued…"
-                : `Downloading ${job.source_url.slice(0, 48)}…`);
+                : job.source_url.slice(0, 48));
+            const isCancelling = cancellingIds.has(job.id);
             return (
               <div key={job.id} className="ingest-job">
                 <div className="ingest-job-head">
                   <span className="ingest-status">{job.status}</span>
                   <span className="ingest-url">{message}</span>
+                  <button
+                    type="button"
+                    className="ingest-cancel-btn"
+                    disabled={isCancelling}
+                    onClick={() => handleCancel(job.id)}
+                  >
+                    {isCancelling ? "…" : "Cancel"}
+                  </button>
                 </div>
                 <div className="ingest-bar">
                   <div
@@ -217,13 +248,6 @@ export function IngestPanel({
                     style={{ width: `${Math.min(100, Math.max(0, progress))}%` }}
                   />
                 </div>
-                <button
-                  type="button"
-                  className="file-btn ingest-cancel-btn"
-                  onClick={() => cancelIngest(job.id)}
-                >
-                  Cancel
-                </button>
               </div>
             );
           })}

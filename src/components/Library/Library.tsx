@@ -60,10 +60,32 @@ export function Library({
         </div>
       )}
 
+      <div className="lib-head">
+        <h2>Library</h2>
+        <input
+          className="search-input"
+          placeholder="Filter by title, artist, album…"
+          value={searchText}
+          onChange={(e) => onSearch(e.target.value)}
+        />
+        <button type="button" className="file-btn" onClick={onPickFolder}>
+          Choose folder
+        </button>
+        <button type="button" className="file-btn" onClick={onOpenSettings}>
+          Settings
+        </button>
+      </div>
+
+      <p className="library-hint">
+        Click a <strong>mood pill</strong> to tag one track. Check rows to tag
+        many. For automatic keyword tagging, use <strong>Auto-tag library</strong>{" "}
+        in Settings.
+      </p>
+
       {selectionCount > 0 && (
         <div className="tag-toolbar">
-          <span>
-            {selectionCount} track{selectionCount === 1 ? "" : "s"} selected
+          <span className="tag-toolbar-count">
+            {selectionCount} selected — tag as:
           </span>
           <div className="tag-toolbar-moods">
             {MOODS.map((mood) => (
@@ -91,22 +113,6 @@ export function Library({
           </button>
         </div>
       )}
-
-      <div className="lib-head">
-        <h2>Library</h2>
-        <input
-          className="search-input"
-          placeholder="Filter by title, artist, album…"
-          value={searchText}
-          onChange={(e) => onSearch(e.target.value)}
-        />
-        <button type="button" className="file-btn" onClick={onPickFolder}>
-          Choose folder
-        </button>
-        <button type="button" className="file-btn" onClick={onOpenSettings}>
-          Settings
-        </button>
-      </div>
 
       {tracks.length > 0 ? (
         <VirtualizedTrackTable

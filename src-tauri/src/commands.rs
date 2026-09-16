@@ -233,7 +233,11 @@ pub async fn ingest_youtube(
 }
 
 #[tauri::command]
-pub fn cancel_ingest(job_id: String, state: State<'_, AppState>) -> Result<(), String> {
+pub fn cancel_ingest(
+    job_id: String,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
     state.ingest_registry.cancel(&job_id);
     let _ = state.db.update_ingest_job(
         &job_id,
@@ -241,6 +245,18 @@ pub fn cancel_ingest(job_id: String, state: State<'_, AppState>) -> Result<(), S
         None,
         Some("Import cancelled"),
         Some(0.0),
+    );
+    let _ = app.emit(
+        "ingest-progress",
+        ingest::IngestProgressEvent {
+            job_id,
+            status: "cancelled".to_string(),
+            progress: 0.0,
+            message: "Import cancelled".to_string(),
+            track_id: None,
+            track_ids: vec![],
+            playlist_id: None,
+        },
     );
     Ok(())
 }

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Track } from "../../types";
 import { MoodPicker } from "./MoodPicker";
+import { TrackCheckbox } from "./TrackCheckbox";
 
 const ROW_HEIGHT = 42;
 const BUFFER = 6;
@@ -75,25 +76,24 @@ export function VirtualizedTrackTable({
       <div ref={containerRef} className="virt-scroll" onScroll={onScroll}>
         <div className="virt-inner" style={{ height: totalHeight }}>
           <table
-            className="virt-table"
+            className="virt-table track-table"
             style={{ transform: `translateY(${offsetY}px)` }}
           >
             <thead>
               <tr>
-                <th style={{ width: 36 }}>
-                  <input
-                    type="checkbox"
-                    aria-label="Select all tracks"
+                <th className="col-check">
+                  <TrackCheckbox
                     checked={allSelected}
-                    onChange={(e) => onSelectAll(e.target.checked)}
+                    label="Select all tracks"
+                    onToggle={() => onSelectAll(!allSelected)}
                   />
                 </th>
-                <th style={{ width: 36 }} />
-                <th>Title</th>
-                <th>Artist</th>
-                <th>Album</th>
-                <th>Mood</th>
-                <th style={{ width: 60 }}>Time</th>
+                <th className="col-eq" />
+                <th className="col-title">Title</th>
+                <th className="col-artist">Artist</th>
+                <th className="col-album">Album</th>
+                <th className="col-mood">Mood</th>
+                <th className="col-time">Time</th>
               </tr>
             </thead>
             <tbody>
@@ -109,27 +109,24 @@ export function VirtualizedTrackTable({
                   style={{ height: ROW_HEIGHT }}
                   onClick={() => onPlay(track.id)}
                 >
-                  <td onClick={(e) => e.stopPropagation()}>
-                    <input
-                      type="checkbox"
-                      aria-label={`Select ${track.title}`}
+                  <td className="col-check" onClick={(e) => e.stopPropagation()}>
+                    <TrackCheckbox
                       checked={selectedIds.has(track.id)}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onToggleSelect(track.id, e.shiftKey);
-                      }}
+                      label={`Select ${track.title}`}
+                      onToggle={(shiftKey) => onToggleSelect(track.id, shiftKey)}
                     />
                   </td>
-                  <td><span className="eq">♪</span></td>
-                  <td className="title-cell">
+                  <td className="col-eq"><span className="eq">♪</span></td>
+                  <td className="col-title title-cell">
                     <span className="t">{track.title}</span>
                   </td>
-                  <td className="muted">{track.artist}</td>
-                  <td className="muted">{track.album}</td>
-                  <td>
+                  <td className="col-artist muted">{track.artist}</td>
+                  <td className="col-album muted">{track.album}</td>
+                  <td className="col-mood">
                     <span
                       className="mood-pill"
                       data-mood={track.mood}
+                      title="Click to tag"
                       onClick={(e) => {
                         e.stopPropagation();
                         const ids = selectedIds.has(track.id)
@@ -141,7 +138,7 @@ export function VirtualizedTrackTable({
                       {track.mood}
                     </span>
                   </td>
-                  <td className="muted">{fmtTime(track.duration_sec)}</td>
+                  <td className="col-time muted">{fmtTime(track.duration_sec)}</td>
                 </tr>
               ))}
             </tbody>
