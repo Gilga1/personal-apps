@@ -8,6 +8,7 @@ A collection of small, private tools built for everyday use. Each app lives in i
 |-----|--------|--------|-------------|
 | **ThaliScan** | [`app/nutrition-app`](app/nutrition-app) | `app/nutrition-app` | Photo-based calorie estimator for North Indian vegetarian meals |
 | **Breathe** | [`app/stress-buster`](app/stress-buster) | `app/stress-buster` | Guided breathing exercises with animated cues and haptics |
+| **Wear Log** | [`app/wear-apps`](app/wear-apps) | `feature/wear-apps` | Galaxy Watch voice life-log → API → Notion Habit Tracker |
 
 ## Working on an app
 

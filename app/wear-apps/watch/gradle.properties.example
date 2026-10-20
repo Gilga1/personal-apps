@@ -1,0 +1,8 @@
+org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
+android.useAndroidX=true
+kotlin.code.style=official
+android.nonTransitiveRClass=true
+
+# Point at your API. On emulator use 10.0.2.2; on watch use your PC Tailscale/LAN IP.
+API_BASE_URL=http://10.0.2.2:8001
+DEVICE_API_TOKEN=change-me-to-a-long-random-token

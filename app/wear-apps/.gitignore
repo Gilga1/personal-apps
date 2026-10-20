@@ -1,0 +1,8 @@
+.env
+api/.venv/
+api/data/
+**/__pycache__/
+*.pyc
+watch/local.properties
+watch/.gradle/
+watch/**/build/

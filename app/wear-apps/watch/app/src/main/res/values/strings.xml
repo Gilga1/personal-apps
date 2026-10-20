@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Wear Log</string>
+    <string name="log_label">LOG</string>
+    <string name="tap_speak">Tap &amp; speak</string>
+    <string name="voice_prompt">Log a habit…</string>
+</resources>
